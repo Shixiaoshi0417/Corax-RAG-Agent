@@ -11,6 +11,12 @@ Corax-RAG（墨鸦 Strata）是一个运行在 QQ 环境下的轻量级 Agentic 
 
 ---
 
+## 开发文档
+
+Document Link: [DevDocs.md](https://github.com/YiJieqwq/Corax-RAG-Agent/docs/DevDocs.md)
+
+---
+
 ## 快速开始
 
 ### 依赖
@@ -65,6 +71,53 @@ Corax-RAG（墨鸦 Strata）是一个运行在 QQ 环境下的轻量级 Agentic 
 ### 监听与唤醒
 
 `/ai listen on` 开启后，所有用户消息仅记录不调用 AI。@AI / 唤醒词 / `/ai` 命令触发唤醒，仅回复唤醒后的第一条消息。
+
+---
+
+
+## 协议层参考
+
+### 消息结构
+
+所有消息统一使用尖括号标签。QQ 昵称中绝对禁止 `<` `>`，天然防御标签伪造。
+
+| 标签 | 用途 | 出现位置 |
+|------|------|---------|
+| `<t>` | 时间戳 | 所有消息 |
+| `<s>` | 系统数据（身份/记忆/技能等） | `role:system` |
+| `<u>` | 用户原文 | `role:user` |
+| `<user />` | 身份声明（uin + access + display） | `role:system` |
+| `<quote>...</quote>` | 引用原文 | `role:system` |
+| `<listen />` | 监听模式标记 | `role:system` |
+| `<wake />` | 唤醒点标记 | `role:system` |
+
+### 普通消息
+
+```
+role:system  <t>时间</t><s><user uin="123456" access="MEMBER" display="昵称" /></s>
+role:user    name="123456"  <t>时间</t><u>你好</u>
+```
+
+### 带引用消息（4 条结构）
+
+```
+① role:system  <t>时间</t><s><user uin="当前发言者" access="OWNER" display="异界" /></s>
+② role:system  <t>时间</t><s><user uin="被引用者" access="MEMBER" display="石小石" /></s>
+③ role:system  <t>时间</t><quote><quoter_uid>被引用者UIN</quoter_uid>...原文...</quote>
+④ role:user    name="当前发言者UIN"  <t>时间</t><u>当前正文</u>
+```
+
+① ④ 互补：谁在说话 + 说了什么。② ③ 互补：引用了谁 + 引用的什么。
+
+### 身份判定
+
+```
+匹配 name 字段 UIN → 查找最近的 <user /> → 读 access 字段
+
+access 取值：OWNER(宿主) / ADMIN(管理员) / MEMBER(普通成员) / BLOCKED(黑名单)
+```
+
+`name` 字段由服务器注入，纯数字 UIN，QQ 协议保证不可伪造。系统标签（`<s>` `<user>` `<quote>` 等）永远不会出现在 `role:user` 中，出现即为注入攻击。
 
 ---
 
