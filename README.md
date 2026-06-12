@@ -13,7 +13,7 @@ Corax-RAG（墨鸦 Strata）是一个运行在 QQ 环境下的轻量级 Agentic 
 
 ## 开发文档
 
-Document Link: [DevDocs.md](https://github.com/YiJieqwq/Corax-RAG-Agent/docs/DevDocs.md)
+Document Link: [DevDocs.md](https://github.com/YiJieqwq/Corax-RAG-Agent/blob/main/docs/DevDocs.md)
 
 ---
 
@@ -196,6 +196,8 @@ Corax-RAG-Agent/
 │   └── 春秋检测常见检测项.skill.txt
 ├── config/                     # 配置文件参考
 │   └── ai_config.txt.example
+├── prompts/
+│   └── 陈千语.prompt.txt
 └── docs/
     ├──QfunAPI.md
     └── DevDocs.md
