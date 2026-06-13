@@ -1,15 +1,16 @@
 # 墨鸦 Strata config
 
-api_key= <api_key>
+api_key=null
 model=deepseek-v4-flash
 context_ttl=60
 max_turns=80
 ai_url=https://api.deepseek.com
-search_provider=bocha
-search_api_key= <search_api_key>
+search_provider=tavily
+search_api_key=null
 show_stats=0
 debug=0
-temperature=0.5
+temperature=0.7
 pat_wake=1
 ai_prefix=1
+search_rounds=3
 sewarden=1
