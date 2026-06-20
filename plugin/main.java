@@ -1366,9 +1366,9 @@ void handleAi(Object msg, String prompt) {
                 sb.append("[全部提醒] ").append(all.size()).append("条\n");
                 for (int ri = 0; ri < all.size(); ri++) {
                     Map rm = (Map) all.get(ri);
-                    long remindAt = ((Long) rm.get("remind_at")).longValue();
-                    long leftMs = remindAt - System.currentTimeMillis();
-                    String leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
+                    remindAt = Long.parseLong(String.valueOf(rm.get("remind_at")));
+                    leftMs = remindAt - System.currentTimeMillis();
+                    leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
                     String uin = (String) rm.get("uin");
                     String name = getMemberName(chatType, peerUin, uin);
                     sb.append("#").append(rm.get("id")).append(" [").append(name).append("] ").append(rm.get("content")).append(" (").append(leftStr).append(")\n");
@@ -1383,9 +1383,9 @@ void handleAi(Object msg, String prompt) {
                 sb.append("[定时提醒] ").append(pending.size()).append("条\n");
                 for (int ri = 0; ri < pending.size(); ri++) {
                     Map rm = (Map) pending.get(ri);
-                    long remindAt = ((Long) rm.get("remind_at")).longValue();
-                    long leftMs = remindAt - System.currentTimeMillis();
-                    String leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
+                    remindAt = Long.parseLong(String.valueOf(rm.get("remind_at")));
+                    leftMs = remindAt - System.currentTimeMillis();
+                    leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
                     sb.append("#").append(rm.get("id")).append(" ").append(rm.get("content")).append(" (").append(leftStr).append(")\n");
                 }
                 sendStyledHeader(msg, "INFO", sb.toString().trim());
@@ -1772,10 +1772,7 @@ dumpMsgs.put(dj);
                     now = System.currentTimeMillis();
                     for (int ri = 0; ri < prs.size(); ri++) {
                         Map rm = (Map) prs.get(ri);
-                        rid = ((Number) rm.get("id")).longValue();
-                        rc = (String) rm.get("content");
-                        rat = ((Number) rm.get("remind_at")).longValue();
-                        sb.append("#").append(rid).append(": \"").append(rc).append("\" 剩余").append(relativeTimeLeft(rat - now));
+                        sb.append("#").append(rm.get("id")).append(": \"").append(rm.get("content")).append("\" 剩余").append(relativeTimeLeft(Long.parseLong(String.valueOf(rm.get("remind_at"))) - now));
                         if (ri < prs.size() - 1) sb.append("; ");
                     }
                 }
