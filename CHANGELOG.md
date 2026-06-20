@@ -3,6 +3,7 @@
 ### Features
 - Enhance Tavily Extract (fetch_page): batch-extract up to 5 URLs, advanced depth, 6000 char limit (thanks @Shixiaoshi0417)
 - fetch_page tool only exposed when search_provider=tavily
+- Add search_memory / search_public_memory tools: AI can search memories by content keyword, not just by tag (thanks @Shixiaoshi0417)
 - Search final round physically prevents tool calls, ensuring answer output
 - Protocol: add <refmsgid> tag explanation, close </s>, SEWarden clean quoted text
 - Tag rename: <qid>→<refmsgid>, <mop>→<memop>, <hit>→<tagresult>
