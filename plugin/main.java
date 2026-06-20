@@ -1017,6 +1017,15 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"提醒id\"}},\"required\":[\"id\"]}"));
     t15.put("function", f15);
     tools.put(t15);
+    // list_reminders
+    JSONObject t16 = new JSONObject();
+    t16.put("type", "function");
+    JSONObject f16 = new JSONObject();
+    f16.put("name", "list_reminders");
+    f16.put("description", "查询当前用户的所有待触发定时提醒,用户询问自己有哪些提醒时调用");
+    f16.put("parameters", new JSONObject("{\"type\":\"object\",\"properties\":{}}"));
+    t16.put("function", f16);
+    tools.put(t16);
     // toggle_listen
     JSONObject t11 = new JSONObject();
     t11.put("type", "function");
@@ -1349,6 +1358,24 @@ void handleAi(Object msg, String prompt) {
                 boolean ok = cancelReminder(rid, senderUin);
                 sendStyledHeader(msg, "INFO", ok ? "提醒#" + rid + " 已取消" : "取消失败(不存在或无权限)");
             } catch (Exception e) { sendStyledHeader(msg, "ERROR", "用法: /ai reminder rm <id>"); }
+        } else if (rarg.equals("all")) {
+            if (!userRole.equals("ADMIN") && !userRole.equals("OWNER")) { sendPermissionDenied(msg); return; }
+            List all = getAllPendingReminders();
+            if (all.isEmpty()) { sendStyledHeader(msg, "INFO", "全局暂无待执行的提醒"); }
+            else {
+                StringBuilder sb = new StringBuilder();
+                sb.append("[全部提醒] ").append(all.size()).append("条\n");
+                for (int ri = 0; ri < all.size(); ri++) {
+                    Map rm = (Map) all.get(ri);
+                    long remindAt = ((Long) rm.get("remind_at")).longValue();
+                    long leftMs = remindAt - System.currentTimeMillis();
+                    String leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
+                    String uin = (String) rm.get("uin");
+                    String name = getMemberName(chatType, peerUin, uin);
+                    sb.append("#").append(rm.get("id")).append(" [").append(name).append("] ").append(rm.get("content")).append(" (").append(leftStr).append(")\n");
+                }
+                sendStyledHeader(msg, "INFO", sb.toString().trim());
+            }
         } else {
             List pending = getPendingReminders(senderUin);
             if (pending.isEmpty()) { sendStyledHeader(msg, "INFO", "暂无待执行的提醒"); }
@@ -1735,6 +1762,30 @@ dumpMsgs.put(dj);
                     ctxR.put("_ts", System.currentTimeMillis());
                     ctx.add(ctxR);
                 }
+            }
+            else if (fn.equals("list_reminders")) {
+                List prs = getPendingReminders(senderUin);
+                StringBuilder sb = new StringBuilder();
+                sb.append("<reminders t=\"").append(getCurrentTime()).append("\">");
+                if (prs.isEmpty()) {
+                    sb.append("当前没有待触发的提醒");
+                } else {
+                    long now = System.currentTimeMillis();
+                    for (int ri = 0; ri < prs.size(); ri++) {
+                        Map rm = (Map) prs.get(ri);
+                        long rid = ((Number) rm.get("id")).longValue();
+                        String rc = (String) rm.get("content");
+                        long rat = ((Number) rm.get("remind_at")).longValue();
+                        sb.append("#").append(rid).append(": \"").append(rc).append("\" 剩余").append(relativeTimeLeft(rat - now));
+                        if (ri < prs.size() - 1) sb.append("; ");
+                    }
+                }
+                sb.append("</reminders>");
+                Map ctxR = new HashMap();
+                ctxR.put("role", "system");
+                ctxR.put("content", sb.toString());
+                ctxR.put("_ts", System.currentTimeMillis());
+                ctx.add(ctxR);
             }
             else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
@@ -2560,6 +2611,25 @@ List getPendingReminders(String uin) {
             m.put("id", c.getLong(0));
             m.put("content", c.getString(1));
             m.put("remind_at", c.getLong(2));
+            results.add(m);
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+    return results;
+}
+
+List getAllPendingReminders() {
+    List results = new ArrayList();
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery(
+            "SELECT id, uin, content, remind_at FROM reminders WHERE fired=0 ORDER BY remind_at ASC", null);
+        while (c.moveToNext()) {
+            Map m = new HashMap();
+            m.put("id", c.getLong(0));
+            m.put("uin", c.getString(1));
+            m.put("content", c.getString(2));
+            m.put("remind_at", c.getLong(3));
             results.add(m);
         }
     } catch (Exception e) { }
