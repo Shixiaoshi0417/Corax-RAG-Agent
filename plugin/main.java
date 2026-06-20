@@ -2981,7 +2981,6 @@ void handleAiConfig(Object msg) {
     Map cfg = loadAiConfig();
     StringBuilder sb = new StringBuilder("[AI 配置]\n");
     String[] keys = { "model","api_key","ai_url","context_ttl","max_turns","search_provider","search_api_key","search_rounds","show_stats","debug","ai_prefix","temperature","pat_wake","sewarden" };
-    String[] keys = { "model","api_key","ai_url","context_ttl","max_turns","search_provider","search_api_key","show_stats","debug","ai_prefix","temperature","search_rounds","pat_wake","sewarden" };
     for (int i = 0; i < keys.length; i++) { String k = keys[i]; String v = (String) cfg.get(k); if (v == null) v = ""; if (k.contains("api_key") && v.length() >= 8) v = maskApiKey(v); sb.append(k).append(" = ").append(v).append("\n"); }
     sb.append("default_account = ").append(getDefaultAccount()).append("\n");
     String persona = loadPersona(); sb.append("人设 = ").append(getActivePersona()).append(persona.isEmpty() ? " (未)" : " (" + persona.length() + "字符)").append("\n");
@@ -3108,6 +3107,9 @@ public void onMsg(Object msg) {
         String aiArg = trimmed.substring(3).trim();
         if (aiArg.isEmpty()) { sendStyledHeader(msg, "ERROR", "/ai <内容> / memory / debug / reboot / set / config / forget / off / on / status"); return; }
         handleAi(msg, aiArg); return;
+    }
+    if (!aiProcessing && startsWithWakeWord(trimmed)) {
+        handleAi(msg, trimmed); return;
     }
     if (trimmed.startsWith("/setdefaultaccount")) {
         if (!getRole(senderUin).equals("OWNER")) { sendPermissionDenied(msg); return; }
