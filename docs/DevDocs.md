@@ -1,5 +1,5 @@
 
-# 墨鸦 Strata v4.2.1 — 开发文档
+# 墨鸦 Strata v4.3.0 — 开发文档
 
 ---
 
@@ -323,7 +323,7 @@ CREATE TABLE memories (
 | v4.0 | 全尖括号标签 + name 纯 UIN + 监听只记录 + 系统概览白盒 |
 | v4.1 | 加入 SEWarden |
 | v4.2 | Tavily 搜索支持 + 可配置搜索轮数 |
-| v4.2.1 | Tavily Extract 批量URL+advanced深度 + fetch_page条件注入 + 标签改名(refmsgid/memop/tagresult) + 搜索轮次强制回答 + 协议层3修 + 14项社区Bug修复 |
+| v4.3.0 | Tavily Extract 批量URL+advanced深度 + fetch_page条件注入 + 标签改名(refmsgid/memop/tagresult) + 搜索轮次强制回答 + 协议层3修 + 14项社区Bug修复 |
 
 ---
 
