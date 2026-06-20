@@ -926,16 +926,18 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"搜索词\"}},\"required\":[\"query\"]}"));
     t7.put("function", f7);
     tools.put(t7);
-    // fetch_page
-    JSONObject t8 = new JSONObject();
-    t8.put("type", "function");
-    JSONObject f8 = new JSONObject();
-    f8.put("name", "fetch_page");
-    f8.put("description", "抓取网页全文(配置tavily时优先Tavily Extract)。不得附带content。");
-    f8.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL\"}},\"required\":[\"url\"]}"));
-    t8.put("function", f8);
-    tools.put(t8);
+    // fetch_page — 仅 Tavily 提供 Extract API，bocha/bing 原始抓取无实用价值
+    if ("tavily".equals((String) loadAiConfig().get("search_provider"))) {
+        JSONObject t8 = new JSONObject();
+        t8.put("type", "function");
+        JSONObject f8 = new JSONObject();
+        f8.put("name", "fetch_page");
+        f8.put("description", "抓取网页全文(Tavily Extract，干净文本)。不得附带content。");
+        f8.put("parameters", new JSONObject(
+            "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL\"}},\"required\":[\"url\"]}"));
+        t8.put("function", f8);
+        tools.put(t8);
+    }
     // call_skill
     JSONObject t9 = new JSONObject();
     t9.put("type", "function");
