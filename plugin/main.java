@@ -31,6 +31,7 @@ static long wakeWordsFileMtime = 0;
 
 static String cachedSkills = null;
 static boolean aiProcessing = false;
+static Handler reminderHandler = null;
 static Set listenSessions = null;
 static boolean aiReady = false;
 static String lastAssistantMsg = null;
@@ -1016,6 +1017,15 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"提醒id\"}},\"required\":[\"id\"]}"));
     t15.put("function", f15);
     tools.put(t15);
+    // list_reminders
+    JSONObject t16 = new JSONObject();
+    t16.put("type", "function");
+    JSONObject f16 = new JSONObject();
+    f16.put("name", "list_reminders");
+    f16.put("description", "查询当前用户的所有待触发定时提醒,用户询问自己有哪些提醒时调用");
+    f16.put("parameters", new JSONObject("{\"type\":\"object\",\"properties\":{}}"));
+    t16.put("function", f16);
+    tools.put(t16);
     // toggle_listen
     JSONObject t11 = new JSONObject();
     t11.put("type", "function");
@@ -1348,6 +1358,24 @@ void handleAi(Object msg, String prompt) {
                 boolean ok = cancelReminder(rid, senderUin);
                 sendStyledHeader(msg, "INFO", ok ? "提醒#" + rid + " 已取消" : "取消失败(不存在或无权限)");
             } catch (Exception e) { sendStyledHeader(msg, "ERROR", "用法: /ai reminder rm <id>"); }
+        } else if (rarg.equals("all")) {
+            if (!userRole.equals("ADMIN") && !userRole.equals("OWNER")) { sendPermissionDenied(msg); return; }
+            List all = getAllPendingReminders();
+            if (all.isEmpty()) { sendStyledHeader(msg, "INFO", "全局暂无待执行的提醒"); }
+            else {
+                StringBuilder sb = new StringBuilder();
+                sb.append("[全部提醒] ").append(all.size()).append("条\n");
+                for (int ri = 0; ri < all.size(); ri++) {
+                    Map rm = (Map) all.get(ri);
+                    long remindAt = ((Long) rm.get("remind_at")).longValue();
+                    long leftMs = remindAt - System.currentTimeMillis();
+                    String leftStr = leftMs <= 0 ? "即将触发" : relativeTimeLeft(leftMs);
+                    String uin = (String) rm.get("uin");
+                    String name = getMemberName(chatType, peerUin, uin);
+                    sb.append("#").append(rm.get("id")).append(" [").append(name).append("] ").append(rm.get("content")).append(" (").append(leftStr).append(")\n");
+                }
+                sendStyledHeader(msg, "INFO", sb.toString().trim());
+            }
         } else {
             List pending = getPendingReminders(senderUin);
             if (pending.isEmpty()) { sendStyledHeader(msg, "INFO", "暂无待执行的提醒"); }
@@ -1734,6 +1762,30 @@ dumpMsgs.put(dj);
                     ctxR.put("_ts", System.currentTimeMillis());
                     ctx.add(ctxR);
                 }
+            }
+            else if (fn.equals("list_reminders")) {
+                List prs = getPendingReminders(senderUin);
+                StringBuilder sb = new StringBuilder();
+                sb.append("<reminders t=\"").append(getCurrentTime()).append("\">");
+                if (prs.isEmpty()) {
+                    sb.append("当前没有待触发的提醒");
+                } else {
+                    long now = System.currentTimeMillis();
+                    for (int ri = 0; ri < prs.size(); ri++) {
+                        Map rm = (Map) prs.get(ri);
+                        long rid = ((Number) rm.get("id")).longValue();
+                        String rc = (String) rm.get("content");
+                        long rat = ((Number) rm.get("remind_at")).longValue();
+                        sb.append("#").append(rid).append(": \"").append(rc).append("\" 剩余").append(relativeTimeLeft(rat - now));
+                        if (ri < prs.size() - 1) sb.append("; ");
+                    }
+                }
+                sb.append("</reminders>");
+                Map ctxR = new HashMap();
+                ctxR.put("role", "system");
+                ctxR.put("content", sb.toString());
+                ctxR.put("_ts", System.currentTimeMillis());
+                ctx.add(ctxR);
             }
             else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
@@ -2499,31 +2551,53 @@ long storeReminder(String uin, String peerUin, int chatType, String content, lon
         cv.put("remind_at", remindAt);
         cv.put("created_at", System.currentTimeMillis());
         cv.put("fired", 0);
-        return getDb().insert("reminders", null, cv);
+        long id = getDb().insert("reminders", null, cv);
+        if (id > 0) scheduleReminder(id, remindAt);
+        return id;
     } catch (Exception e) { log("error.txt", "storeReminder: " + e.getMessage()); return -1; }
 }
 
-void checkAndFireReminders() {
+void scheduleReminder(long id, long remindAt) {
+    if (reminderHandler == null) reminderHandler = new Handler(Looper.getMainLooper());
+    long delay = remindAt - System.currentTimeMillis();
+    if (delay < 0) delay = 0;
+    reminderHandler.postDelayed(new Runnable() {
+        public void run() { fireReminder(id); }
+    }, delay);
+}
+
+void fireReminder(long id) {
     Cursor c = null;
     try {
         c = getDb().rawQuery(
-            "SELECT id, uin, peer_uin, chat_type, content FROM reminders WHERE fired=0 AND remind_at<=?",
-            new String[]{String.valueOf(System.currentTimeMillis())});
-        while (c.moveToNext()) {
-            long id = c.getLong(0);
-            String uin = c.getString(1);
-            String peerUin = c.getString(2);
-            int chatType = c.getInt(3);
-            String content = c.getString(4);
+            "SELECT uin, peer_uin, chat_type, content FROM reminders WHERE id=? AND fired=0",
+            new String[]{String.valueOf(id)});
+        if (c.moveToFirst()) {
+            String uin = c.getString(0);
+            String peerUin = c.getString(1);
+            int chatType = c.getInt(2);
+            String content = c.getString(3);
             String prefix = "1".equals(getAiConfig("ai_prefix")) ? "[AI] " : "";
             sendMsg(peerUin, prefix + "⏰ 提醒 @" + getMemberName(chatType, peerUin, uin) + "：" + content, chatType);
             ContentValues cv = new ContentValues();
             cv.put("fired", 1);
             getDb().update("reminders", cv, "id=?", new String[]{String.valueOf(id)});
         }
-    } catch (Exception e) { log("error.txt", "checkReminders: " + e.getMessage()); }
+    } catch (Exception e) { log("error.txt", "fireReminder: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
 }
+
+void loadPendingReminders() {
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery("SELECT id, remind_at FROM reminders WHERE fired=0", null);
+        while (c.moveToNext()) {
+            scheduleReminder(c.getLong(0), c.getLong(1));
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+}
+
 
 List getPendingReminders(String uin) {
     List results = new ArrayList();
@@ -2537,6 +2611,25 @@ List getPendingReminders(String uin) {
             m.put("id", c.getLong(0));
             m.put("content", c.getString(1));
             m.put("remind_at", c.getLong(2));
+            results.add(m);
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+    return results;
+}
+
+List getAllPendingReminders() {
+    List results = new ArrayList();
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery(
+            "SELECT id, uin, content, remind_at FROM reminders WHERE fired=0 ORDER BY remind_at ASC", null);
+        while (c.moveToNext()) {
+            Map m = new HashMap();
+            m.put("id", c.getLong(0));
+            m.put("uin", c.getString(1));
+            m.put("content", c.getString(2));
+            m.put("remind_at", c.getLong(3));
             results.add(m);
         }
     } catch (Exception e) { }
@@ -2950,6 +3043,7 @@ boolean isNumeric(String s) { return s != null && s.matches("[0-9]+"); }
 
 // ==================== 生命周期 ====================
 public void onDestroy() {
+    if (reminderHandler != null) { reminderHandler.removeCallbacksAndMessages(null); reminderHandler = null; }
     for (Object key : aiContexts.keySet()) {
         try {
             String[] parts = ((String) key).split("_");
@@ -2993,8 +3087,8 @@ public void onMsg(Object msg) {
         loadAiConfig();
         loadSkills();
         aiReady = true;
+        loadPendingReminders();
     }
-    try { checkAndFireReminders(); } catch (Exception ignored) { }
     
     String text = msg.msg;
     if (text == null) return;
