@@ -1769,12 +1769,12 @@ dumpMsgs.put(dj);
                 if (prs.isEmpty()) {
                     sb.append("当前没有待触发的提醒");
                 } else {
-                    long now = System.currentTimeMillis();
+                    now = System.currentTimeMillis();
                     for (int ri = 0; ri < prs.size(); ri++) {
                         Map rm = (Map) prs.get(ri);
-                        long rid = ((Number) rm.get("id")).longValue();
-                        String rc = (String) rm.get("content");
-                        long rat = ((Number) rm.get("remind_at")).longValue();
+                        rid = ((Number) rm.get("id")).longValue();
+                        rc = (String) rm.get("content");
+                        rat = ((Number) rm.get("remind_at")).longValue();
                         sb.append("#").append(rid).append(": \"").append(rc).append("\" 剩余").append(relativeTimeLeft(rat - now));
                         if (ri < prs.size() - 1) sb.append("; ");
                     }
