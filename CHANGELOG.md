@@ -11,8 +11,10 @@
 ## Unreleased
 ### Features
 - Enhance Tavily Extract (fetch_page): batch-extract up to 5 URLs in one call, upgrade extract_depth basic→advanced, raise fetched content limit 3000→6000 chars
+- Add search_memory / search_public_memory tools: AI can now search memories by content keyword, not just by tag
 
 ### Bug Fixes
+- Fix duplicate fetch_page tool definition when Tavily is configured
 - Fix callAI HTTP connection leak: add finally block to disconnect
 - Fix ctx ordering: save user+R1 before tool processing to preserve correct history sequence
 - Fix duplicate quote extraction: move quote parsing before dumpctx, remove old duplicate block

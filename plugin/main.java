@@ -940,18 +940,6 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL,多个用空格分隔\"}},\"required\":[\"url\"]}"));
     t8.put("function", f8);
     tools.put(t8);
-    // fetch_page — 仅 Tavily 提供 Extract API，支持批量URL + advanced深度
-    if ("tavily".equals((String) loadAiConfig().get("search_provider"))) {
-        JSONObject t8 = new JSONObject();
-        t8.put("type", "function");
-        JSONObject f8 = new JSONObject();
-        f8.put("name", "fetch_page");
-        f8.put("description", "抓取网页全文(Tavily Extract,advanced深度)。可一次传多个URL用空格分隔(最多5个)批量抓取。不得附带content。");
-        f8.put("parameters", new JSONObject(
-            "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL,多个用空格分隔\"}},\"required\":[\"url\"]}"));
-        t8.put("function", f8);
-        tools.put(t8);
-    }
     // call_skill
     JSONObject t9 = new JSONObject();
     t9.put("type", "function");
@@ -973,6 +961,26 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"tag\":{\"type\":\"string\",\"description\":\"标签名\"}},\"required\":[\"tag\"]}"));
     t10.put("function", f10);
     tools.put(t10);
+    // search_memory
+    JSONObject t12 = new JSONObject();
+    t12.put("type", "function");
+    JSONObject f12 = new JSONObject();
+    f12.put("name", "search_memory");
+    f12.put("description", "按关键词搜索私有记忆内容(当标签回查无结果或需要模糊匹配时使用)");
+    f12.put("parameters", new JSONObject(
+        "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"}},\"required\":[\"keyword\"]}"));
+    t12.put("function", f12);
+    tools.put(t12);
+    // search_public_memory
+    JSONObject t13 = new JSONObject();
+    t13.put("type", "function");
+    JSONObject f13 = new JSONObject();
+    f13.put("name", "search_public_memory");
+    f13.put("description", "按关键词搜索公有记忆内容(当公有标签回查无结果或需要模糊匹配时使用)");
+    f13.put("parameters", new JSONObject(
+        "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"}},\"required\":[\"keyword\"]}"));
+    t13.put("function", f13);
+    tools.put(t13);
     // toggle_listen
     JSONObject t11 = new JSONObject();
     t11.put("type", "function");
@@ -1065,7 +1073,8 @@ String buildAI2Prompt(String peerUin, int chatType) {
     sb.append("<skills>\n");
     sb.append("记忆管理模式：");
     sb.append("#M/#MP 私有记忆，#P/#PP 公有记忆。标签必打。创建公有记忆时 about 填被描述者 UIN，不清楚不填。\n");
-    sb.append("冷标签无匹配调 search_by_tag(私有)或 search_public_by_tag(公有)。\n\n");
+    sb.append("冷标签无匹配调 search_by_tag(私有)或 search_public_by_tag(公有)。\n");
+    sb.append("需要按内容关键词模糊搜索时调 search_memory(私有)或 search_public_memory(公有)。\n\n");
 
     sb.append("联网搜索约束：\n");
     int searchRounds = 3;
@@ -1638,7 +1647,7 @@ dumpMsgs.put(dj);
         for (int i = 0; i < ai2TCs.length(); i++) {
             JSONObject tc = ai2TCs.getJSONObject(i);
             String fn = tc.getJSONObject("function").getString("name");
-            if (fn.equals("search_by_tag") || fn.equals("search_public_by_tag")) coldLookups.add(tc);
+            if (fn.equals("search_by_tag") || fn.equals("search_public_by_tag") || fn.equals("search_memory") || fn.equals("search_public_memory")) coldLookups.add(tc);
             else if (fn.equals("search_web") || fn.equals("fetch_page")) searchCalls.add(tc);
             else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
@@ -1778,18 +1787,26 @@ dumpMsgs.put(dj);
         if (!coldLookups.isEmpty()) {
             JSONObject ltc = (JSONObject) coldLookups.get(0);
             String fn = ltc.getJSONObject("function").getString("name");
-            String tag = getToolArg(ltc, "tag");
-            if (!tag.isEmpty()) {
-                boolean isPublic = fn.equals("search_public_by_tag");
-                List coldResult = isPublic ? searchPublicByTag(tag) : searchMemoriesByTag(senderUin, tag);
+            boolean isContentSearch = fn.equals("search_memory") || fn.equals("search_public_memory");
+            String queryKey = isContentSearch ? getToolArg(ltc, "keyword") : getToolArg(ltc, "tag");
+            if (!queryKey.isEmpty()) {
+                boolean isPublic = fn.equals("search_public_by_tag") || fn.equals("search_public_memory");
+                List coldResult;
+                if (isContentSearch) {
+                    coldResult = isPublic ? searchPublicMemories(queryKey) : searchMemories(senderUin, queryKey);
+                } else {
+                    coldResult = isPublic ? searchPublicByTag(queryKey) : searchMemoriesByTag(senderUin, queryKey);
+                }
                 StringBuilder coldCtx = new StringBuilder();
-                coldCtx.append("<tagresult t=\"" + getCurrentTime() + "\" tag=\"" + tag + "\" scope=\"" + (isPublic ? "public" : "private") + "\">\n");
-                if (!coldResult.isEmpty()) for (int ci = 0; ci < coldResult.size(); ci++) { Map cm = (Map) coldResult.get(ci); 
+                String resultTag = isContentSearch ? "searchresult" : "tagresult";
+                String queryAttr = isContentSearch ? "keyword" : "tag";
+                coldCtx.append("<" + resultTag + " t=\"" + getCurrentTime() + "\" " + queryAttr + "=\"" + queryKey + "\" scope=\"" + (isPublic ? "public" : "private") + "\">\n");
+                if (!coldResult.isEmpty()) for (int ci = 0; ci < coldResult.size(); ci++) { Map cm = (Map) coldResult.get(ci);
                     boolean isPrivateMemo = !isPublic;
                     coldCtx.append(isPrivateMemo ? "#M" : "#P").append(cm.get("id")).append(" ").append(cm.get("content")).append("\n");
                 }
                 else coldCtx.append("(无)\n");
-                coldCtx.append("</tagresult>\n");
+                coldCtx.append("</" + resultTag + ">\n");
                 coldCtx.append("以上回查结果已加载至上下文，直接回答用户，不再调用工具。");
                 JSONObject r2Sys = new JSONObject(); r2Sys.put("role", "system"); r2Sys.put("content", coldCtx.toString()); ai2Msgs.put(r2Sys);
 
@@ -2027,6 +2044,7 @@ String sewardenClean(String text) {
                .replace("<skill", "〈skill")
                .replace("<memop", "〈memop")
                .replace("<tagresult", "〈tagresult")
+               .replace("<searchresult", "〈searchresult")
                .replace("<search", "〈search")
                .replace("<pinned", "〈pinned")
                .replace("<archive", "〈archive")
