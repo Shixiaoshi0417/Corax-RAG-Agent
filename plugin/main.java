@@ -2186,7 +2186,7 @@ String tavilySearch(String query) {
         JSONObject reqBody = new JSONObject();
         reqBody.put("api_key", apiKey);
         reqBody.put("query", query);
-        reqBody.put("search_depth", "basic");
+        reqBody.put("search_depth", "advanced");
         reqBody.put("max_results", 5);
         byte[] postData = reqBody.toString().getBytes("UTF-8");
         OutputStream os = conn.getOutputStream(); os.write(postData); os.flush(); os.close();
