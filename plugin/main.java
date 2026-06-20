@@ -1282,7 +1282,6 @@ Map callAI(String configPrefix, String systemPrompt, JSONArray messages, int max
         } else { result.put("prompt_tokens", 0); result.put("completion_tokens", 0); }
         return result;
     } catch (Exception e) { log("error.txt", "callAI: " + e.getMessage()); return null; }
-    finally { if (conn != null) conn.disconnect(); }
     finally { if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) { } } }
 }
 
