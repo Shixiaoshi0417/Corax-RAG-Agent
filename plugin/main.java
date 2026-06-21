@@ -3128,11 +3128,10 @@ public void onMsg(Object msg) {
             return;
         }
         
-        // 判断是否被唤醒：@AI、唤醒词、/ai 命令三种情况
+        // 判断是否被唤醒：@AI
         boolean isWakeUp = false;
         if (msg.atList != null && msg.atList.contains(myUin)) isWakeUp = true;
-        if (!isWakeUp && startsWithWakeWord(trimmed)) isWakeUp = true;
-        
+
         if (isWakeUp) {
             // 被唤醒 → 调用 handleAi（handleAi 内部会注入 <wake />）
             handleAi(msg, trimmed);
