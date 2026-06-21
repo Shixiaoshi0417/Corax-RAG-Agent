@@ -656,7 +656,7 @@ List searchMemoriesByTag(String uin, String tag) {
     return results;
 }
 
-List searchPublicByTag(String tag) {
+List searchPublicMemoriesByTag(String tag) {
     List results = new ArrayList();
     Cursor c = null;
     try {
@@ -939,19 +939,18 @@ JSONArray buildAI2Tools() {
         "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"搜索词\"}},\"required\":[\"query\"]}"));
     t7.put("function", f7);
     tools.put(t7);
-    // fetch_page
-    JSONObject t8 = new JSONObject();
-    t8.put("type", "function");
-    JSONObject f8 = new JSONObject();
-    f8.put("name", "fetch_page");
-    String fetchDesc = "抓取网页全文";
-    if ("tavily".equals(getAiConfig("search_provider"))) fetchDesc += "(Tavily Extract,advanced深度)。可一次传多个URL用空格分隔(最多5个)批量抓取";
-    fetchDesc += "。不得附带content。";
-    f8.put("description", fetchDesc);
-    f8.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL,多个用空格分隔\"}},\"required\":[\"url\"]}"));
-    t8.put("function", f8);
-    tools.put(t8);
+    // fetch_page：仅在 tavily 时暴露（Extract API 支持批量抓取）
+    if ("tavily".equals(getAiConfig("search_provider"))) {
+        JSONObject t8 = new JSONObject();
+        t8.put("type", "function");
+        JSONObject f8 = new JSONObject();
+        f8.put("name", "fetch_page");
+        f8.put("description", "抓取网页全文(Tavily Extract,advanced深度)。可一次传多个URL用空格分隔(最多5个)批量抓取。不得附带content。");
+        f8.put("parameters", new JSONObject(
+            "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL,多个用空格分隔\"}},\"required\":[\"url\"]}"));
+        t8.put("function", f8);
+        tools.put(t8);
+    }
     // call_skill
     JSONObject t9 = new JSONObject();
     t9.put("type", "function");
@@ -1358,7 +1357,7 @@ void handleAi(Object msg, String prompt) {
             } catch (Exception e) { sendStyledHeader(msg, "ERROR", "用法: /ai reminder rm <id>"); }
         } else if (rarg.equals("all")) {
             if (!userRole.equals("ADMIN") && !userRole.equals("OWNER")) { sendPermissionDenied(msg); return; }
-            List all = getAllPendingReminders();
+            List all = getAllReminders();
             if (all.isEmpty()) { sendStyledHeader(msg, "INFO", "全局暂无待执行的提醒"); }
             else {
                 StringBuilder sb = new StringBuilder();
@@ -1375,7 +1374,7 @@ void handleAi(Object msg, String prompt) {
                 sendStyledHeader(msg, "INFO", sb.toString().trim());
             }
         } else {
-            List pending = getPendingReminders(senderUin);
+            List pending = getReminders(senderUin);
             if (pending.isEmpty()) { sendStyledHeader(msg, "INFO", "暂无待执行的提醒"); }
             else {
                 StringBuilder sb = new StringBuilder();
@@ -1665,10 +1664,6 @@ dumpMsgs.put(dj);
 
     boolean hasSentReply = false; boolean isFirstReply = true;
 
-    // ctx 先存 user + R1，保证历史顺序正确（R2 在后面追加）
-    addToContext(ctx, "user", "<t>" + getCurrentTime() + "</t><u>" + prompt + "</u>", senderUin);
-    if (!ai2Content.isEmpty()) addToContext(ctx, "assistant", ai2Content, null);
-
     if (!ai2Content.isEmpty()) {
         String[] segs = ai2Content.split("\\[SPLIT\\]");
         for (int si = 0; si < segs.length; si++) {
@@ -1718,9 +1713,9 @@ dumpMsgs.put(dj);
                 }
             }
             else if (fn.equals("list_reminders")) {
-                List prs = getPendingReminders(senderUin);
+                List prs = getReminders(senderUin);
                 StringBuilder sb = new StringBuilder();
-                sb.append("<reminders t=\"").append(getCurrentTime()).append("\">");
+                sb.append("<reminder t=\"").append(getCurrentTime()).append("\">");
                 if (prs.isEmpty()) {
                     sb.append("当前没有待触发的提醒");
                 } else {
@@ -1731,7 +1726,7 @@ dumpMsgs.put(dj);
                         if (ri < prs.size() - 1) sb.append("; ");
                     }
                 }
-                sb.append("</reminders>");
+                sb.append("</reminder>");
                 Map ctxR = new HashMap();
                 ctxR.put("role", "system");
                 ctxR.put("content", sb.toString());
@@ -1884,7 +1879,7 @@ dumpMsgs.put(dj);
                 if (isContentSearch) {
                     coldResult = isPublic ? searchPublicMemories(queryKey) : searchMemories(senderUin, queryKey);
                 } else {
-                    coldResult = isPublic ? searchPublicByTag(queryKey) : searchMemoriesByTag(senderUin, queryKey);
+                    coldResult = isPublic ? searchPublicMemoriesByTag(queryKey) : searchMemoriesByTag(senderUin, queryKey);
                 }
                 StringBuilder coldCtx = new StringBuilder();
                 String resultTag = isContentSearch ? "searchresult" : "tagresult";
@@ -2550,7 +2545,7 @@ void loadPendingReminders() {
 }
 
 
-List getPendingReminders(String uin) {
+List getReminders(String uin) {
     List results = new ArrayList();
     Cursor c = null;
     try {
@@ -2569,7 +2564,7 @@ List getPendingReminders(String uin) {
     return results;
 }
 
-List getAllPendingReminders() {
+List getAllReminders() {
     List results = new ArrayList();
     Cursor c = null;
     try {
