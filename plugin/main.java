@@ -269,7 +269,6 @@ boolean canUseAi(String uin) {
     if (role.equals("BLOCKED")) return false;
     if (uin.equals(myUin)) return true;
     if (role.equals("ADMIN") || role.equals("OWNER")) return true;
-    if (role.equals("ADMIN")) return true;
     if (getDefaultAccount().equals("member")) return true;
     Set whitelist = readStringSet(pluginPath + "/config/members.txt");
     return whitelist.contains(uin);
@@ -1421,7 +1420,7 @@ void handleAi(Object msg, String prompt) {
                                 java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText");
                                 sf.setAccessible(true);
                                 Object src = sf.get(re);
-                                if (src != null && !src.toString().isEmpty()) { quotedText = src.toString(); }
+                                if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); }
                             } catch (Exception ex2) { }
                             break;
                         }
@@ -1468,42 +1467,6 @@ void handleAi(Object msg, String prompt) {
         sendStyledHeader(msg, "ERROR", "AI 未启用"); aiProcessing = false; return;
     }
     getDb(); List ctx = getAiContext(peerUin, chatType);
-    quotedUin = "";
-    try {
-        Object msgData = msg.data;
-        if (msgData != null) {
-            try {
-                java.util.List elements = (java.util.List) msgData.getClass()
-                    .getDeclaredField("elements")
-                    .get(msgData);
-                if (elements != null) {
-                    for (int ei = 0; ei < elements.size(); ei++) {
-                        Object el = elements.get(ei);
-                        java.lang.reflect.Field rf = el.getClass().getDeclaredField("replyElement"); rf.setAccessible(true);
-                        Object re = rf.get(el);
-                        if (re != null) {
-                            String ruin = "";
-                            try { java.lang.reflect.Field sf = re.getClass().getDeclaredField("senderUin"); sf.setAccessible(true); Object su = sf.get(re); if (su != null && !su.toString().isEmpty()) ruin = su.toString(); } catch (Exception ex2) { }
-                            quotedUin = ruin;
-                            try {
-                                java.lang.reflect.Field sf2 = re.getClass().getDeclaredField("sourceMsgId"); 
-                                sf2.setAccessible(true);
-                                Object smi = sf2.get(re);
-                                if (smi != null && !smi.toString().isEmpty()) quotedMsgId = smi.toString();
-                            } catch (Exception ex3) { }
-                            try {
-                                java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText"); 
-                                sf.setAccessible(true);
-                                Object src = sf.get(re);
-                                if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); }
-                            } catch (Exception ex2) { }
-                            break;
-                        }
-                    }
-                }
-           } catch (Exception ignored) { } 
-        }
-    } catch (Exception ignored) { }
 
     if (trimmed.equals("dumpctx")) {
         if (!userRole.equals("OWNER") && !userRole.equals("ADMIN")) { sendPermissionDenied(msg); return; }
@@ -1561,14 +1524,6 @@ dumpMsgs.put(dj);
          catch (Exception e) { sendStyledHeader(msg, "ERROR", "导出失败"); }
          aiProcessing = false; return;
     }
-    
-    if (trimmed.equals("reboot") || trimmed.startsWith("reboot ")) { handleReboot(msg, trimmed); return; }
-    if (trimmed.equals("debug") || trimmed.startsWith("debug ")) { handleDebug(msg, trimmed); return; }
-    Map cfg = loadAiConfig();
-    if (((String) cfg.get("api_key")).isEmpty()) {
-        sendStyledHeader(msg, "ERROR", "AI 未启用"); aiProcessing = false; return;
-    }
-    getDb(); List ctx = getAiContext(peerUin, chatType);
 
     String atInfo = "";
     try {
@@ -2685,15 +2640,8 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             deleteMemoryById(id, senderUin, userRole);
             storeMemory(senderUin, content, tags, "public", origSubject);
             Cursor last = null;
-            try { last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null); if (last.moveToFirst()) { long lastId = last.getLong(0); getDb().execSQL("UPDATE memories SET weight=? WHERE id=?", new Object[]{oldW + 1, lastId}); } } catch (Exception e) { }
+            try { last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null); if (last.moveToFirst()) { int lastId = last.getInt(0); getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId); } } catch (Exception e) { }
             finally { if (last != null) last.close(); }
-            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String su = c.getString(1); if (su != null && !su.isEmpty()) origSubject = su; } } catch (Exception e) { }
-            finally { if (c != null) c.close(); }
-            deleteMemoryById(id, senderUin, userRole);
-            storeMemory(senderUin, content, tags, "public", origSubject);
-int maxId2 = -1;
-            { Cursor mc2 = getDb().rawQuery("SELECT MAX(id) FROM memories WHERE scope='public'", null); if (mc2.moveToFirst()) maxId2 = mc2.getInt(0); mc2.close(); }
-            if (maxId2 > 0) getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + maxId2);
         } else if (fname.equals("delete_memory")) { int id = getToolArgInt(tc, "id"); if (id > 0) deleteMemoryById(id, senderUin, userRole); }
     } catch (Exception e) { log("error.txt", "execMem: " + e.getMessage()); }
 }
@@ -3128,9 +3076,10 @@ public void onMsg(Object msg) {
             return;
         }
         
-        // 判断是否被唤醒：@AI
+        // 判断是否被唤醒：@AI、唤醒词
         boolean isWakeUp = false;
         if (msg.atList != null && msg.atList.contains(myUin)) isWakeUp = true;
+        if (!isWakeUp && startsWithWakeWord(trimmed)) isWakeUp = true;
 
         if (isWakeUp) {
             // 被唤醒 → 调用 handleAi（handleAi 内部会注入 <wake />）
