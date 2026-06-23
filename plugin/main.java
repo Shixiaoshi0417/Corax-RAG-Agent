@@ -3016,9 +3016,6 @@ public void onPaiYiPai(String peerUin, int chatType, String operatorUin) {
 public void onMsg(Object msg) {
     if (msg == null) return;
     
-    // 备用测试，用"#TEST"触发
-    if ("#TEST".equals(msg.msg)) { sendMsg(msg.type == 2 ? msg.peerUin : msg.userUin, "onMsg works", msg.type); return; }
-    
     // v3.0: 冷启动预热，静默初始化内部状态
     if (!aiReady) {
         getDb();
@@ -3167,6 +3164,7 @@ public void onMsg(Object msg) {
 if (!trimmed.startsWith("/") || trimmed.length() < 2) return;
     String[] tokens = trimmed.split("\\s+");
     String cmd = tokens[0];
+    if (!readStringSet(pluginPath + "/config/enabled_conversations.txt").contains(peerUin + "_" + chatType)) return;
     if (cmd.equals("/whoami")) {
         String role = getRole(senderUin);
         sendStyledHeader(msg, "INFO", "角色: " + role + "\n记忆: " + getMemoryCount(senderUin) + " 条\n默认账户: " + getDefaultAccount());
