@@ -1115,7 +1115,7 @@ String buildAI2Prompt(String peerUin, int chatType) {
     
     sb.append("<skills>\n");
     sb.append("记忆管理模式：");
-    sb.append("#M/#MP 私有记忆，#P/#PP 公有记忆。标签必打。创建公有记忆时 about 填被描述者 UIN，不清楚不填。\n");
+    sb.append("#M/#MP 私有记忆，#P/#PP 公有记忆。标签必打。创建公有记忆时 about 填被描述者 UIN，不清楚不填。当用户对话中透露个人信息(如姓名、喜好、计划、经历等)或群聊出现值得记录的信息时，应主动调用 create_memory 记录，无需等待用户要求。\n");
     sb.append("冷标签无匹配调 search_by_tag(私有)或 search_public_by_tag(公有)。\n");
     sb.append("需要按内容关键词模糊搜索时调 search_memory(私有)或 search_public_memory(公有)。\n");
     sb.append("定时提醒：用户要求提醒时调 set_reminder(content,minutes)，取消调 cancel_reminder(id)。\n\n");
@@ -1944,7 +1944,7 @@ dumpMsgs.put(dj);
             if (result.length() > resultCap) result = result.substring(0, resultCap) + "...";
             String note;
             if (sr >= maxSr) {
-                note = "已达搜索上限。基于以上所有搜索结果，现在必须直接回答用户。禁止再调用任何工具。";
+                note = "已达搜索上限。你已经没有可用的工具了，必须基于以上所有搜索结果直接回答用户。只输出纯文本，不要尝试调用任何工具。";
             } else {
                 note = "基于以上搜索结果回答用户。如果当前信息已足够则直接回答；如果确实不够请再调一次 search_web（仅调函数，不输出content）。";
             }
