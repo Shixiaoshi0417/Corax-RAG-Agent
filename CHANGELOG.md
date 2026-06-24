@@ -14,6 +14,8 @@
 
 ### Removed
 - 移除定时提醒系统（由 shell daemon 替代）
+
+## v4.3.2
 ### Features
 - Add set_reminder / cancel_reminder / list_reminders tools: AI can set timed reminders, cancel them, and query pending reminders with remaining time (thanks @Shixiaoshi0417)
 - Handler.postDelayed precise scheduling for reminders, independent of message events

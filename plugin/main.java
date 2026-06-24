@@ -1422,12 +1422,9 @@ dumpMsgs.put(dj);
             if (fn.equals("shell")) {
                 String cmd = getToolArg(tc, "cmd");
                 if (cmd.isEmpty()) continue;
-                String[] qparts = cmd.split("\\s+"); boolean quiet = false; StringBuilder cleanCmd = new StringBuilder();
-                for (int qi = 0; qi < qparts.length; qi++) {
-                    if (qparts[qi].equals("--quiet")) quiet = true;
-                    else { if (cleanCmd.length() > 0) cleanCmd.append(" "); cleanCmd.append(qparts[qi]); }
-                }
-                cmd = cleanCmd.toString().trim();
+                Map qr = stripQuietFlag(cmd);
+                cmd = (String) qr.get("cmd");
+                boolean quiet = (Boolean) qr.get("quiet");
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
                 if (!quiet && !output.isEmpty()) {
@@ -1519,12 +1516,9 @@ dumpMsgs.put(dj);
                     if (rfn.equals("shell")) {
                         String scmd = getToolArg(rtc, "cmd");
                         if (!scmd.isEmpty()) {
-                            String[] qp2 = scmd.split("\\s+"); boolean q = false; StringBuilder cc2 = new StringBuilder();
-                            for (int qi2 = 0; qi2 < qp2.length; qi2++) {
-                                if (qp2[qi2].equals("--quiet")) q = true;
-                                else { if (cc2.length() > 0) cc2.append(" "); cc2.append(qp2[qi2]); }
-                            }
-                            scmd = cc2.toString().trim();
+                            Map qr2 = stripQuietFlag(scmd);
+                            scmd = (String) qr2.get("cmd");
+                            boolean q = (Boolean) qr2.get("quiet");
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
                             if (!q && !out.isEmpty()) {
                                 JSONObject srm = new JSONObject();
@@ -2613,6 +2607,20 @@ String getToolArg(JSONObject tc, String key) {
 
 int getToolArgInt(JSONObject tc, String key) {
     try { return new JSONObject(tc.getJSONObject("function").getString("arguments")).optInt(key, -1); } catch (Exception e) { return -1; }
+}
+
+Map stripQuietFlag(String cmd) {
+    String[] parts = cmd.split("\\s+");
+    boolean quiet = false;
+    StringBuilder clean = new StringBuilder();
+    for (int i = 0; i < parts.length; i++) {
+        if (parts[i].equals("--quiet")) quiet = true;
+        else { if (clean.length() > 0) clean.append(" "); clean.append(parts[i]); }
+    }
+    Map result = new HashMap();
+    result.put("cmd", clean.toString().trim());
+    result.put("quiet", quiet);
+    return result;
 }
 
 void sendDebug(String peerUin, int chatType, String text) { try { sendMsg(peerUin, "[DEBUG] " + text, chatType); } catch (Exception e) { } }
