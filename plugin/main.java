@@ -2572,76 +2572,73 @@ static int nextDaemonPid = 1;
 
 // 单行命令解析与执行
 String shellExecLine(String line, String senderUin, String peerUin, int chatType) {
-    if (line == null || line.trim().isEmpty()) {
-        return "";
-    }
+    if (line == null || line.trim().isEmpty()) return "";
     line = line.trim();
 
-    // 子Shell支持: (cmd1; cmd2) 语法
+    // 子Shell: ( ... )
     if (line.startsWith("(") && line.endsWith(")")) {
         line = line.substring(1, line.length() - 1).trim();
     }
 
-    // 分号/与号分隔的多条命令，顺序执行 (; 或 &&)
-    if (line.contains(";") || line.contains("&&")) {
-        String[] seqs = line.split(";|&&");
-        String lastOutput = "";
-        for (int si = 0; si < seqs.length; si++) {
-            String s = seqs[si].trim();
-            if (s.isEmpty()) continue;
-            lastOutput = shellExecLine(s, senderUin, peerUin, chatType);
+    // ---- Tokenizer ----
+    List tokens = new ArrayList();
+    int pos = 0;
+    while (pos < line.length()) {
+        char c = line.charAt(pos);
+        // 空白跳过
+        if (c == ' ' || c == '\t') { pos++; continue; }
+        // 注释
+        if (c == '#') break;
+        // 后台
+        if (c == '&' && pos == line.length() - 1) { tokens.add("&"); break; }
+        if (c == '&' && pos + 1 < line.length() && line.charAt(pos + 1) == '&') { tokens.add("&&"); pos += 2; continue; }
+        // OR
+        if (c == '|' && pos + 1 < line.length() && line.charAt(pos + 1) == '|') { tokens.add("||"); pos += 2; continue; }
+        // 管道
+        if (c == '|') { tokens.add("|"); pos++; continue; }
+        // 分号
+        if (c == ';') { tokens.add(";"); pos++; continue; }
+        // 重定向
+        if (c == '>' && pos + 1 < line.length() && line.charAt(pos + 1) == '>') { tokens.add(">>"); pos += 2; continue; }
+        if (c == '>') { tokens.add(">"); pos++; continue; }
+        if (c == '<') { tokens.add("<"); pos++; continue; }
+        // 引号字符串
+        if (c == '"' || c == '\'') {
+            char quote = c;
+            int startQ = ++pos;
+            while (pos < line.length() && line.charAt(pos) != quote) pos++;
+            tokens.add(line.substring(startQ, pos));
+            if (pos < line.length()) pos++; // skip closing quote
+            continue;
         }
-        return lastOutput;
+        // 普通单词
+        int startW = pos;
+        while (pos < line.length() && " |;&><\t".indexOf(line.charAt(pos)) < 0) pos++;
+        tokens.add(line.substring(startW, pos));
     }
+    if (tokens.isEmpty()) return "";
 
-    // 后台执行 &
-    boolean bg = line.endsWith("&");
-    if (bg) line = line.substring(0, line.length() - 1).trim();
+    // 后台标记
+    boolean bg = tokens.size() > 0 && tokens.get(tokens.size() - 1).equals("&");
+    if (bg) tokens.remove(tokens.size() - 1);
 
-    // 重定向检测
-    String outRedir = null;
-    boolean outAppend = false;
-    int gtIdx = line.indexOf(">");
-    if (gtIdx > 0) {
-        if (line.charAt(gtIdx + 1) == '>') {
-            outAppend = true;
-            outRedir = line.substring(gtIdx + 2).trim();
-        } else {
-            outRedir = line.substring(gtIdx + 1).trim();
-        }
-        line = line.substring(0, gtIdx).trim();
-    }
+    // ---- 递归下降解析器 ----
+    // 解析入口
+    int[] idx = new int[]{0};
+    String result = parseSequence(tokens, idx, "", senderUin, peerUin, chatType);
 
-    // 管道
-    String[] cmds = line.split("\\|");
-    String pipeIn = "";
-
-    for (int ci = 0; ci < cmds.length; ci++) {
-        String[] parts = cmds[ci].trim().split("\\s+");
-        if (parts.length == 0 || parts[0].isEmpty()) continue;
-        String cmd = parts[0];
-        String[] args = new String[parts.length - 1];
-        for (int ai = 1; ai < parts.length; ai++) args[ai - 1] = parts[ai];
-
-        String result = shellBuiltin(cmd, args, pipeIn, senderUin, peerUin, chatType);
-        pipeIn = (result != null) ? result : "";
-    }
-
-    // 重定向写入
-    if (outRedir != null && !pipeIn.isEmpty()) {
-        vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
-    }
-
-    // 后台
+    // 后台执行
     if (bg) {
-        final String finalLine = line;
+        final List finalTokens = new ArrayList(tokens);
         final String su = senderUin, pu = peerUin;
         final int ct = chatType;
         final int p = nextDaemonPid++;
         Thread t = new Thread(new Runnable() {
             public void run() {
-                try { shellExecLine(finalLine, su, pu, ct); }
-                catch (Exception e) {
+                try {
+                    int[] ix = new int[]{0};
+                    parseSequence(finalTokens, ix, "", su, pu, ct);
+                } catch (Exception e) {
                     List q = (List) daemonOutputs.get(p);
                     if (q == null) { q = java.util.Collections.synchronizedList(new ArrayList()); daemonOutputs.put(p, q); }
                     q.add("stderr: " + e.getMessage());
@@ -2655,11 +2652,68 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         return "[pid:" + p + "]";
     }
 
-    return outRedir != null ? "" : pipeIn;
+    return result != null ? result : "";
 }
 
-// 内置命令
+// 解析序列: pipeline ((; | && | ||) pipeline)*
+String parseSequence(List tokens, int[] idx, String stdin, String senderUin, String peerUin, int chatType) {
+    String result = parsePipeline(tokens, idx, stdin, senderUin, peerUin, chatType);
+    while (idx[0] < tokens.size()) {
+        String op = (String) tokens.get(idx[0]);
+        if (op.equals(";")) { idx[0]++; result = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); }
+        else if (op.equals("&&")) { idx[0]++; result = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); }
+        else if (op.equals("||")) { idx[0]++; String r = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); if (result == null || result.isEmpty()) result = r; }
+        else break;
+    }
+    return result;
+}
+
+// 解析管道: command (| command)*
+String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, String peerUin, int chatType) {
+    String pipeIn = stdin;
+    while (idx[0] < tokens.size()) {
+        // 收集命令词和重定向
+        List cmdArgs = new ArrayList();
+        String outRedir = null; boolean outAppend = false; String inRedir = null;
+        while (idx[0] < tokens.size()) {
+            String t = (String) tokens.get(idx[0]);
+            if (t.equals("|") || t.equals(";") || t.equals("&&") || t.equals("||")) break;
+            if (t.equals(">")) { idx[0]++; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
+            if (t.equals(">>")) { idx[0]++; outAppend = true; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
+            if (t.equals("<")) { idx[0]++; if (idx[0] < tokens.size()) inRedir = (String) tokens.get(idx[0]++); continue; }
+            cmdArgs.add(t);
+            idx[0]++;
+        }
+
+        if (cmdArgs.isEmpty()) break;
+
+        // 输入重定向
+        if (inRedir != null) pipeIn = vfsRead(inRedir, senderUin, peerUin, chatType);
+
+        // 执行命令
+        String cmd = (String) cmdArgs.get(0);
+        String[] args = new String[cmdArgs.size() - 1];
+        for (int ai = 1; ai < cmdArgs.size(); ai++) args[ai - 1] = (String) cmdArgs.get(ai);
+
+        String result = shellBuiltin(cmd, args, pipeIn != null ? pipeIn : "", senderUin, peerUin, chatType);
+        pipeIn = (result != null) ? result : "";
+
+        // 输出重定向
+        if (outRedir != null && !pipeIn.isEmpty()) {
+            vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
+            pipeIn = "";
+        }
+
+        // 检查管道
+        if (idx[0] < tokens.size() && tokens.get(idx[0]).equals("|")) { idx[0]++; continue; }
+        break;
+    }
+    return pipeIn;
+}
+
+// 内置命令 (保持原有实现，不变)
 String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, String peerUin, int chatType) {
+String cmd, String[] args, String stdin, String senderUin, String peerUin, int chatType) {
     try {
         if (cmd.equals("echo")) {
             StringBuilder sb = new StringBuilder();
