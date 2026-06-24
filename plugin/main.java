@@ -873,187 +873,15 @@ String buildPublicStrata() {
 // ==================== FC 工具（单模型） ====================
 JSONArray buildAI2Tools() {
     JSONArray tools = new JSONArray();
-    // create_memory
-    JSONObject t1 = new JSONObject();
-    t1.put("type", "function");
-    JSONObject f1 = new JSONObject();
-    f1.put("name", "create_memory");
-    f1.put("description", "创建私有记忆（自述信息）");
-    f1.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{" +
-        "\"content\":{\"type\":\"string\",\"description\":\"记忆内容\"}," +
-        "\"tags\":{\"type\":\"string\",\"description\":\"标签，逗号分隔\"}," +
-        "\"about\":{\"type\":\"string\",\"description\":\"记忆对象UIN,缺省为说话者本人\"}}," +
-        "\"required\":[\"content\",\"tags\"]}"));
-    t1.put("function", f1);
-    tools.put(t1);
-    // create_public_memory
-    JSONObject t2 = new JSONObject();
-    t2.put("type", "function");
-    JSONObject f2 = new JSONObject();
-    f2.put("name", "create_public_memory");
-    f2.put("description", "创建公有记忆（群聊转述他人信息）");
-    f2.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{" +
-        "\"content\":{\"type\":\"string\",\"description\":\"记忆内容\"}," +
-        "\"tags\":{\"type\":\"string\",\"description\":\"标签，逗号分隔\"}," +
-        "\"about\":{\"type\":\"string\",\"description\":\"记忆对象UIN,无法确定时留空\"}}," +
-        "\"required\":[\"content\",\"tags\"]}"));
-    t2.put("function", f2);
-    tools.put(t2);
-    // overwrite_memory
-    JSONObject t3 = new JSONObject();
-    t3.put("type", "function");
-    JSONObject f3 = new JSONObject();
-    f3.put("name", "overwrite_memory");
-    f3.put("description", "覆写私有记忆,id指定");
-    f3.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{" +
-        "\"id\":{\"type\":\"integer\",\"description\":\"要覆写的记忆id\"}," +
-        "\"content\":{\"type\":\"string\",\"description\":\"新内容\"}," +
-        "\"tags\":{\"type\":\"string\",\"description\":\"新标签\"}}," +
-        "\"required\":[\"id\",\"content\",\"tags\"]}"));
-    t3.put("function", f3);
-    tools.put(t3);
-    // overwrite_public_memory
-    JSONObject t4 = new JSONObject();
-    t4.put("type", "function");
-    JSONObject f4 = new JSONObject();
-    f4.put("name", "overwrite_public_memory");
-    f4.put("description", "覆写公有记忆,id指定");
-    f4.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{" +
-        "\"id\":{\"type\":\"integer\",\"description\":\"要覆写的记忆id\"}," +
-        "\"content\":{\"type\":\"string\",\"description\":\"新内容\"}," +
-        "\"tags\":{\"type\":\"string\",\"description\":\"新标签\"}}," +
-        "\"required\":[\"id\",\"content\",\"tags\"]}"));
-    t4.put("function", f4);
-    tools.put(t4);
-    // delete_memory
-    JSONObject t5 = new JSONObject();
-    t5.put("type", "function");
-    JSONObject f5 = new JSONObject();
-    f5.put("name", "delete_memory");
-    f5.put("description", "按id删除记忆");
-    f5.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"要删除的记忆id\"}},\"required\":[\"id\"]}"));
-    t5.put("function", f5);
-    tools.put(t5);
-    // search_by_tag
-    JSONObject t6 = new JSONObject();
-    t6.put("type", "function");
-    JSONObject f6 = new JSONObject();
-    f6.put("name", "search_by_tag");
-    f6.put("description", "按标签回查记忆(当档案无答案但问题涉及冷标签时使用)");
-    f6.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"tag\":{\"type\":\"string\",\"description\":\"标签名\"}},\"required\":[\"tag\"]}"));
-    t6.put("function", f6);
-    tools.put(t6);
-    // search_web
-    JSONObject t7 = new JSONObject();
-    t7.put("type", "function");
-    JSONObject f7 = new JSONObject();
-    f7.put("name", "search_web");
-    f7.put("description", "联网搜索。不得附带content。");
-    f7.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"搜索词\"}},\"required\":[\"query\"]}"));
-    t7.put("function", f7);
-    tools.put(t7);
-    // fetch_page：仅在 tavily 时暴露（Extract API 支持批量抓取）
-    if ("tavily".equals(getAiConfig("search_provider"))) {
-        JSONObject t8 = new JSONObject();
-        t8.put("type", "function");
-        JSONObject f8 = new JSONObject();
-        f8.put("name", "fetch_page");
-        f8.put("description", "抓取网页全文(Tavily Extract,advanced深度)。可一次传多个URL用空格分隔(最多5个)批量抓取。不得附带content。");
-        f8.put("parameters", new JSONObject(
-            "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"完整URL,多个用空格分隔\"}},\"required\":[\"url\"]}"));
-        t8.put("function", f8);
-        tools.put(t8);
-    }
-    // call_skill
-    JSONObject t9 = new JSONObject();
-    t9.put("type", "function");
-    JSONObject f9 = new JSONObject();
-    f9.put("name", "call_skill");
-    f9.put("description", "调用系统技能");
-    f9.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"command\":{\"type\":\"string\",\"description\":\"命令原文\"}},\"required\":[\"command\"]}"));
-    t9.put("function", f9);
-    tools.put(t9);
-    
-    // search_public_by_tag
-    JSONObject t10 = new JSONObject();
-    t10.put("type", "function");
-    JSONObject f10 = new JSONObject();
-    f10.put("name", "search_public_by_tag");
-    f10.put("description", "按公有标签回查群共享记忆");
-    f10.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"tag\":{\"type\":\"string\",\"description\":\"标签名\"}},\"required\":[\"tag\"]}"));
-    t10.put("function", f10);
-    tools.put(t10);
-    // search_memory
-    JSONObject t12 = new JSONObject();
-    t12.put("type", "function");
-    JSONObject f12 = new JSONObject();
-    f12.put("name", "search_memory");
-    f12.put("description", "按关键词搜索私有记忆内容(当标签回查无结果或需要模糊匹配时使用)");
-    f12.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"}},\"required\":[\"keyword\"]}"));
-    t12.put("function", f12);
-    tools.put(t12);
-    // search_public_memory
-    JSONObject t13 = new JSONObject();
-    t13.put("type", "function");
-    JSONObject f13 = new JSONObject();
-    f13.put("name", "search_public_memory");
-    f13.put("description", "按关键词搜索公有记忆内容(当公有标签回查无结果或需要模糊匹配时使用)");
-    f13.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"keyword\":{\"type\":\"string\",\"description\":\"搜索关键词\"}},\"required\":[\"keyword\"]}"));
-    t13.put("function", f13);
-    tools.put(t13);
-    // set_reminder
-    JSONObject t14 = new JSONObject();
-    t14.put("type", "function");
-    JSONObject f14 = new JSONObject();
-    f14.put("name", "set_reminder");
-    f14.put("description", "为当前用户设置定时提醒，到时间后自动发送提醒消息");
-    f14.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{" +
-        "\"content\":{\"type\":\"string\",\"description\":\"提醒内容\"}," +
-        "\"minutes\":{\"type\":\"integer\",\"description\":\"多少分钟后提醒\"}}," +
-        "\"required\":[\"content\",\"minutes\"]}"));
-    t14.put("function", f14);
-    tools.put(t14);
-    // cancel_reminder
-    JSONObject t15 = new JSONObject();
-    t15.put("type", "function");
-    JSONObject f15 = new JSONObject();
-    f15.put("name", "cancel_reminder");
-    f15.put("description", "取消一个定时提醒");
-    f15.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"提醒id\"}},\"required\":[\"id\"]}"));
-    t15.put("function", f15);
-    tools.put(t15);
-    // list_reminders
-    JSONObject t16 = new JSONObject();
-    t16.put("type", "function");
-    JSONObject f16 = new JSONObject();
-    f16.put("name", "list_reminders");
-    f16.put("description", "查询当前用户的所有待触发定时提醒,用户询问自己有哪些提醒时调用");
-    f16.put("parameters", new JSONObject("{\"type\":\"object\",\"properties\":{}}"));
-    t16.put("function", f16);
-    tools.put(t16);
-    // toggle_listen
-    JSONObject t11 = new JSONObject();
-    t11.put("type", "function");
-    JSONObject f11 = new JSONObject();
-    f11.put("name", "toggle_listen");
-    f11.put("description", "开启/关闭当前会话的监听模式");
-    f11.put("parameters", new JSONObject(
-        "{\"type\":\"object\",\"properties\":{\"enable\":{\"type\":\"boolean\",\"description\":\"true开启,false关闭\"}},\"required\":[\"enable\"]}"));
-    t11.put("function", f11);
-    tools.put(t11);
+    JSONObject t = new JSONObject();
+    t.put("type", "function");
+    JSONObject f = new JSONObject();
+    f.put("name", "shell");
+    f.put("description", "Corax OS Shell。执行 Linux 风格命令。支持管道(|) 重定向(>) 后台(&)。run corax-help for available commands. 输出结果将自动返回给你。添加 --quiet 标记可以静默执行。");
+    f.put("parameters", new JSONObject(
+        "{\"type\":\"object\",\"properties\":{\"cmd\":{\"type\":\"string\",\"description\":\"要执行的shell命令\"}},\"required\":[\"cmd\"]}"));
+    t.put("function", f);
+    tools.put(t);
     return tools;
 }
 
@@ -1637,247 +1465,44 @@ dumpMsgs.put(dj);
 
     if (ai2TCs != null && ai2TCs.length() > 0) {
         List memOps = new ArrayList(); List searchCalls = new ArrayList();
-        List skillCalls = new ArrayList(); List coldLookups = new ArrayList();
+        List skillCalls = new ArrayList();
+    List shellCalls = new ArrayList(); List coldLookups = new ArrayList();
         for (int i = 0; i < ai2TCs.length(); i++) {
             JSONObject tc = ai2TCs.getJSONObject(i);
             String fn = tc.getJSONObject("function").getString("name");
-            if (fn.equals("search_by_tag") || fn.equals("search_public_by_tag") || fn.equals("search_memory") || fn.equals("search_public_memory")) coldLookups.add(tc);
-            else if (fn.equals("search_web") || fn.equals("fetch_page")) searchCalls.add(tc);
-            else if (fn.equals("set_reminder")) {
-                String rc = getToolArg(tc, "content"); int mins = getToolArgInt(tc, "minutes");
-                if (!rc.isEmpty() && mins > 0) {
-                    long remindAt = System.currentTimeMillis() + mins * 60 * 1000L;
-                    long rid = storeReminder(senderUin, peerUin, chatType, rc, remindAt);
-                    Map ctxR = new HashMap();
-                    ctxR.put("role", "system");
-                    ctxR.put("content", "<reminder t=\"" + getCurrentTime() + "\">已设置提醒#" + rid + ": " + mins + "分钟后提醒\"" + rc + "\"</reminder>");
-                    ctxR.put("_ts", System.currentTimeMillis());
-                    ctx.add(ctxR);
+            if (fn.equals("shell")) {
+                String cmd = getToolArg(tc, "cmd");
+                if (cmd.isEmpty()) continue;
+                boolean quiet = cmd.contains("--quiet");
+                if (quiet) cmd = cmd.replace("--quiet", "").trim();
+                
+                String output = shellExecLine(cmd, senderUin, peerUin, chatType);
+                if (!quiet && !output.isEmpty()) {
+                    JSONObject sr = new JSONObject();
+                    sr.put("role", "system");
+                    sr.put("content", "<shell_output>\n" + output + "\n</shell_output>\n基于以上 shell 输出继续处理。如果任务完成则直接回复用户。");
+                    ai2Msgs.put(sr);
+                    shellCalls.add(output);
                 }
-            }
-            else if (fn.equals("cancel_reminder")) {
-                int rid = getToolArgInt(tc, "id");
-                if (rid > 0) {
-                    boolean ok = cancelReminder(rid, senderUin);
-                    Map ctxR = new HashMap();
-                    ctxR.put("role", "system");
-                    ctxR.put("content", "<reminder t=\"" + getCurrentTime() + "\">" + (ok ? "提醒#" + rid + "已取消" : "取消失败(不存在或无权限)") + "</reminder>");
-                    ctxR.put("_ts", System.currentTimeMillis());
-                    ctx.add(ctxR);
-                }
-            }
-            else if (fn.equals("list_reminders")) {
-                List prs = getReminders(senderUin);
-                StringBuilder sb = new StringBuilder();
-                sb.append("<reminder t=\"").append(getCurrentTime()).append("\">");
-                if (prs.isEmpty()) {
-                    sb.append("当前没有待触发的提醒");
-                } else {
-                    now = System.currentTimeMillis();
-                    for (int ri = 0; ri < prs.size(); ri++) {
-                        Map rm = (Map) prs.get(ri);
-                        sb.append("#").append(rm.get("id")).append(": \"").append(rm.get("content")).append("\" 剩余").append(relativeTimeLeft(Long.parseLong(String.valueOf(rm.get("remind_at"))) - now));
-                        if (ri < prs.size() - 1) sb.append("; ");
-                    }
-                }
-                sb.append("</reminder>");
-                Map ctxR = new HashMap();
-                ctxR.put("role", "system");
-                ctxR.put("content", sb.toString());
-                ctxR.put("_ts", System.currentTimeMillis());
-                ctx.add(ctxR);
             }
             else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
                 boolean enable = getToolArg(tc, "enable").equals("true");
-                String lkey = peerUin + "_" + chatType;
-                Map ctxListen = new HashMap();
+                String key = peerUin + "_" + chatType;
                 if (enable) {
-                    addToList(pluginPath + "/config/listen_sessions.txt", lkey);
-                    if (listenSessions != null) listenSessions.add(lkey);
-                    ctxListen.put("content", "<listen t=\"" + getCurrentTime() + "\">开启</listen>");
+                    addToList(pluginPath + "/config/listen_sessions.txt", key);
+                    if (listenSessions != null) listenSessions.add(key);
                 } else {
-                    removeFromList(pluginPath + "/config/listen_sessions.txt", lkey);
-                    if (listenSessions != null) listenSessions.remove(lkey);
-                    ctxListen.put("content", "<listen t=\"" + getCurrentTime() + "\">关闭</listen>");
+                    removeFromList(pluginPath + "/config/listen_sessions.txt", key);
+                    if (listenSessions != null) listenSessions.remove(key);
                 }
+                Map ctxListen = new HashMap();
                 ctxListen.put("role", "system");
+                ctxListen.put("content", "<listen t=\"" + getCurrentTime() + "\">" + (enable ? "开启" : "关闭") + "</listen>");
                 ctxListen.put("_ts", System.currentTimeMillis());
                 ctx.add(ctxListen);
             }
-            else memOps.add(tc);
-        }
-        for (int i = 0; i < skillCalls.size(); i++) {
-            JSONObject tc = (JSONObject) skillCalls.get(i);
-            String cmd = getToolArg(tc, "command");
-            if (!cmd.isEmpty()) {
-                String skillName = cmd.split("\\s+")[0];
-                String fullSkill = loadSkillContent(skillName);
-                if (!fullSkill.isEmpty()) {
-                    String skillMsg = "<skill name=\"" + skillName + "\" t=\"" + getCurrentTime() + "\">\n" + fullSkill + "\n</skill>";
-                    JSONObject skillSys = new JSONObject();
-                    skillSys.put("role", "system");
-                    skillSys.put("content", skillMsg);
-                    ai2Msgs.put(skillSys);
-
-                    // 持久化到 ctx
-                    boolean alreadyInCtx = false;
-                    for (int ci = 0; ci < ctx.size(); ci++) {
-                        Map cm = (Map) ctx.get(ci);
-                        if ("system".equals(cm.get("role")) && cm.get("content") != null && ((String) cm.get("content")).startsWith("<skill name=\"" + skillName + "\"")) {
-                            alreadyInCtx = true; break;
-                        }
-                    }
-                    if (!alreadyInCtx) {
-                        Map ctxSkill = new HashMap();
-                        ctxSkill.put("role", "system");
-                        ctxSkill.put("content", skillMsg);
-                        ctxSkill.put("_ts", System.currentTimeMillis());
-                        ctx.add(ctxSkill);
-                    }
-                }
-            }
-        }
-        
-        // v3.0: skills 加载后触发 R2，让 AI 处理 skill 指令（如开启监听）
-        if (!skillCalls.isEmpty()) {
-            JSONObject skillHint = new JSONObject();
-            skillHint.put("role", "system");
-            skillHint.put("content", "技能已加载。执行技能要求:若提到需要开启监听模式,调用 toggle_listen(enable=true)。然后开始技能内容。");
-            ai2Msgs.put(skillHint);
-            Map r2Result = callAI("", ai2Prompt, ai2Msgs, 4096, ai2Tools);
-            totalCalls++;
-            if (r2Result != null) {
-                try { totalPt += Integer.parseInt(String.valueOf(r2Result.get("prompt_tokens"))); } catch (Exception e) { }
-                try { totalCt += Integer.parseInt(String.valueOf(r2Result.get("completion_tokens"))); } catch (Exception e) { }
-                String r2c = (String) r2Result.getOrDefault("content", "");
-                JSONArray r2tc = null;
-                if (r2Result.containsKey("tool_calls")) r2tc = (JSONArray) r2Result.get("tool_calls");
-
-                if (r2tc != null) for (int j = 0; j < r2tc.length(); j++) {
-                    JSONObject rtc = r2tc.getJSONObject(j);
-                    String rfn = rtc.getJSONObject("function").getString("name");
-                    if (rfn.equals("call_skill")) skillCalls.add(rtc);
-                    else if (rfn.equals("toggle_listen")) {
-                        boolean enable = getToolArg(rtc, "enable").equals("true");
-                        String lkey = peerUin + "_" + chatType;
-                        Map ctxListen = new HashMap();
-                        if (enable) {
-                            addToList(pluginPath + "/config/listen_sessions.txt", lkey);
-                            if (listenSessions != null) listenSessions.add(lkey);
-                            ctxListen.put("content", "<listen t=\"" + getCurrentTime() + "\">开启</listen>");
-                        } else {
-                            removeFromList(pluginPath + "/config/listen_sessions.txt", lkey);
-                            if (listenSessions != null) listenSessions.remove(lkey);
-                            ctxListen.put("content", "<listen t=\"" + getCurrentTime() + "\">关闭</listen>");
-                        }
-                        ctxListen.put("role", "system");
-                        ctxListen.put("_ts", System.currentTimeMillis());
-                        ctx.add(ctxListen);
-                    }
-                    else executeMemoryCall(rtc, rfn, senderUin, userRole);
-                }
-
-                if (!r2c.isEmpty()) {
-                     // vip 回复
-                    String[] segs = r2c.split("\\[SPLIT\\]");
-                    for (int si = 0; si < segs.length; si++) {
-                        String seg = segs[si].trim();
-                        if ("1".equals(getAiConfig("ai_prefix"))) seg = "[AI] " + seg;
-                        if (!seg.isEmpty()) {
-                            if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
-                            else sendMsg(peerUin, seg, chatType);
-                            hasSentReply = true;
-                            try { Thread.sleep(150); } catch (Exception ignored) { }
-                        }
-                    }
-                    addToContext(ctx, "assistant", r2c, null);
-                }
-            }
-        }
-
-        
-        for (int i = 0; i < memOps.size(); i++) {
-            JSONObject tc = (JSONObject) memOps.get(i);
-            String fn = tc.getJSONObject("function").getString("name");
-            executeMemoryCall(tc, fn, senderUin, userRole);
-            String memCtx = "";
-            if (fn.equals("create_memory")) {
-                memCtx = "<memop t=\"" + getCurrentTime() + "\">#M 私有记忆已创建: " + getToolArg(tc, "content") + "</memop>";
-            } else if (fn.equals("create_public_memory")) {
-                memCtx = "<memop t=\"" + getCurrentTime() + "\">#P 公有记忆已创建: " + getToolArg(tc, "content") + "</memop>";
-            } else if (fn.equals("overwrite_memory")) {
-                memCtx = "<memop t=\"" + getCurrentTime() + "\">#M" + getToolArg(tc, "id") + " 已覆写: " + getToolArg(tc, "content") + "</memop>";
-            } else if (fn.equals("overwrite_public_memory")) {
-                memCtx = "<memop t=\"" + getCurrentTime() + "\">#P" + getToolArg(tc, "id") + " 已覆写: " + getToolArg(tc, "content") + "</memop>";
-            } else if (fn.equals("delete_memory")) {
-                memCtx = "<memop t=\"" + getCurrentTime() + "\">记忆#" + getToolArg(tc, "id") + " 已删除</memop>";
-            }
-            if (!memCtx.isEmpty()) {
-                Map ctxMem = new HashMap();
-                ctxMem.put("role", "system");
-                ctxMem.put("content", memCtx);
-                ctxMem.put("_ts", System.currentTimeMillis());
-                ctx.add(ctxMem);
-            }
-        }
-        if (!memOps.isEmpty() && !hasSentReply) hasSentReply = true;
-        if (!coldLookups.isEmpty()) {
-            JSONObject ltc = (JSONObject) coldLookups.get(0);
-            String fn = ltc.getJSONObject("function").getString("name");
-            boolean isContentSearch = fn.equals("search_memory") || fn.equals("search_public_memory");
-            String queryKey = isContentSearch ? getToolArg(ltc, "keyword") : getToolArg(ltc, "tag");
-            if (!queryKey.isEmpty()) {
-                boolean isPublic = fn.equals("search_public_by_tag") || fn.equals("search_public_memory");
-                List coldResult;
-                if (isContentSearch) {
-                    coldResult = isPublic ? searchPublicMemories(queryKey) : searchMemories(senderUin, queryKey);
-                } else {
-                    coldResult = isPublic ? searchPublicMemoriesByTag(queryKey) : searchMemoriesByTag(senderUin, queryKey);
-                }
-                StringBuilder coldCtx = new StringBuilder();
-                String resultTag = isContentSearch ? "searchresult" : "tagresult";
-                String queryAttr = isContentSearch ? "keyword" : "tag";
-                coldCtx.append("<" + resultTag + " t=\"" + getCurrentTime() + "\" " + queryAttr + "=\"" + queryKey + "\" scope=\"" + (isPublic ? "public" : "private") + "\">\n");
-                if (!coldResult.isEmpty()) for (int ci = 0; ci < coldResult.size(); ci++) { Map cm = (Map) coldResult.get(ci);
-                    boolean isPrivateMemo = !isPublic;
-                    coldCtx.append(isPrivateMemo ? "#M" : "#P").append(cm.get("id")).append(" ").append(cm.get("content")).append("\n");
-                }
-                else coldCtx.append("(无)\n");
-                coldCtx.append("</" + resultTag + ">\n");
-                coldCtx.append("以上回查结果已加载至上下文，直接回答用户，不再调用工具。");
-                JSONObject r2Sys = new JSONObject(); r2Sys.put("role", "system"); r2Sys.put("content", coldCtx.toString()); ai2Msgs.put(r2Sys);
-
-                // 持久化到 ctx
-                Map ctxCold = new HashMap();
-                ctxCold.put("role", "system");
-                ctxCold.put("content", coldCtx.toString());
-                ctxCold.put("_ts", System.currentTimeMillis());
-                ctx.add(ctxCold);
-
-                Map r2Result = callAI("", ai2Prompt, ai2Msgs, 4096, ai2Tools);
-                totalCalls++;
-                if (r2Result != null) {
-                    try { totalPt += Integer.parseInt(String.valueOf(r2Result.get("prompt_tokens"))); } catch (Exception e) { }
-                    try { totalCt += Integer.parseInt(String.valueOf(r2Result.get("completion_tokens"))); } catch (Exception e) { }
-                    String r2c = (String) r2Result.getOrDefault("content", "");
-                    if (!r2c.isEmpty()) {
-                        String[] segs = r2c.split("\\[SPLIT\\]");
-                        for (int si = 0; si < segs.length; si++) {
-                            String seg = segs[si].trim();
-                            if ("1".equals(getAiConfig("ai_prefix"))) seg = "[AI] " + seg;
-                            if (!seg.isEmpty()) {
-                                if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
-                                else sendMsg(peerUin, seg, chatType);
-                                hasSentReply = true;
-                                try { Thread.sleep(150); } catch (Exception ignored) { }
-                            }
-                        }
-                        addToContext(ctx, "assistant", r2c, null); 
-                    } else if (!hasSentReply) {
-                        sendMsg(peerUin, "[AI] 没找到相关内容，换个说法试试", chatType);
-                        hasSentReply = true;
-                    }
+                  }
                 }
             }
         }
@@ -1886,8 +1511,8 @@ dumpMsgs.put(dj);
         try { maxSr = Integer.parseInt(getAiConfig("search_rounds")); } catch (Exception e) { }
         int sr = 0;
         
-        while (!searchCalls.isEmpty()) {
-            JSONObject tc = (JSONObject) searchCalls.get(0);
+        while (!shellCalls.isEmpty()) {
+            String lastOutput = (String) shellCalls.get(0);
             String fn = tc.getJSONObject("function").getString("name");
             String sq = getToolArg(tc, fn.equals("fetch_page") ? "url" : "query");
             if (sq.isEmpty()) break;
@@ -1904,7 +1529,7 @@ dumpMsgs.put(dj);
             }
             JSONObject srm = new JSONObject(); srm.put("role", "system"); srm.put("content", "<search q=\"" + sq + "\" t=\"" + getCurrentTime() + "\">\n" + result + "\n</search>\n" + note);
             ai2Msgs.put(srm);
-            searchCalls.clear();
+            shellCalls.clear();
             Map sr2 = callAI("", ai2Prompt, ai2Msgs, 8192, sr >= maxSr ? null : ai2Tools); totalCalls++;
             if (sr2 != null) {
                 try { totalPt += Integer.parseInt(String.valueOf(sr2.get("prompt_tokens"))); } catch (Exception e) { }
@@ -1932,7 +1557,7 @@ dumpMsgs.put(dj);
                 if (sr2tc != null) for (int i = 0; i < sr2tc.length(); i++) {
                     JSONObject rtc = sr2tc.getJSONObject(i);
                     String rfn = rtc.getJSONObject("function").getString("name");
-                    if (rfn.equals("search_web") || rfn.equals("fetch_page")) searchCalls.add(rtc);
+                    if (rfn.equals("search_web") || rfn.equals("fetch_page")) shellCalls.add(rtc);
                     else if (rfn.equals("call_skill")) {
                        String cmd = getToolArg(rtc, "command"); 
                        if (!cmd.isEmpty()) skillCalls.add(rtc);
@@ -2554,6 +2179,568 @@ boolean cancelReminder(long id, String uin) {
     } catch (Exception e) { return false; }
 }
 
+
+// ==================== Corax-Shell VFS ====================
+// 虚拟文件系统核心 — 路径式能力暴露
+
+// VFS 读入口
+String vfsRead(String path, String senderUin, String peerUin, int chatType) {
+    path = vfsNorm(path);
+    // /proc/sys/ — 系统属性
+    if (path.startsWith("/proc/sys/")) return vfsReadProcSys(path);
+    // /proc/self/ — 当前会话
+    if (path.startsWith("/proc/self/")) return vfsReadProcSelf(path, senderUin, chatType, peerUin);
+    // /proc/ps,free,uptime — 系统状态
+    if (path.startsWith("/proc/ps")) return vfsReadProcPS();
+    if (path.equals("/proc/free")) return vfsReadProcFree();
+    if (path.equals("/proc/uptime")) return vfsReadProcUptime();
+    if (path.startsWith("/proc/") && path.contains("/status")) return vfsReadProcStatus(path);
+    if (path.startsWith("/proc/") && path.contains("/stdout")) return vfsReadProcStdout(path);
+    // /proc/prompt/
+    if (path.startsWith("/proc/prompt/")) return vfsReadProcPrompt(path);
+    // /etc/
+    if (path.startsWith("/etc/")) return vfsReadEtc(path);
+    // /ctx/
+    if (path.startsWith("/ctx/")) return vfsReadCtx(path);
+    // /var/
+    if (path.equals("/var/data.db")) return "[SQLite: /var/data.db — 使用 sqlite3 查询]";
+    if (path.startsWith("/var/log/")) return vfsReadVarLog(path);
+    // /dev/
+    if (path.startsWith("/dev/")) return vfsReadDev(path, peerUin, chatType);
+    // /persist/
+    if (path.startsWith("/persist/")) return vfsReadPersist(path);
+    // /src/
+    if (path.equals("/src/main.java")) return vfsReadSrc();
+    // /tmp/
+    if (path.startsWith("/tmp/")) return vfsReadTmp(path);
+    // directories
+    if (path.equals("/bin/")) return "corax-mem-create  corax-mem-overwrite  corax-mem-rm  corax-mem-tag  corax-mem-search  corax-search  corax-fetch  corax-skill  corax-listen  corax-help";
+    if (path.equals("/")) return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
+    if (path.equals("/proc/")) return "sys/  self/  prompt/  ps  free  uptime";
+    if (path.equals("/etc/")) return "admins.txt  blocked.txt  members.txt  enabled_conversations.txt  listen_sessions.txt  default_account.txt  prompt/  skills/";
+    return "[路径不存在: " + path + "]";
+}
+
+// VFS 写入口 — 返回 null 成功, 否则返回错误信息
+String vfsWrite(String path, String content, boolean append, String senderUin, String peerUin, int chatType) {
+    path = vfsNorm(path);
+    if (path.startsWith("/proc/sys/")) return vfsWriteProcSys(path, content);
+    if (path.startsWith("/proc/prompt/active")) return vfsWritePromptActive(content);
+    if (path.startsWith("/etc/")) return vfsWriteEtc(path, content, append);
+    if (path.equals("/dev/out")) { vfsWriteDevOut(content, peerUin, chatType); return null; }
+    if (path.equals("/dev/exit")) { vfsWriteDevExit(content); return null; }
+    if (path.startsWith("/persist/")) return vfsWritePersist(path, content, append);
+    if (path.startsWith("/tmp/")) return vfsWriteTmp(path, content, append);
+    if (path.startsWith("/proc/") && path.contains("/kill")) return vfsWriteProcKill(path);
+    if (path.startsWith("/var/data.db")) return vfsWriteVarDb(content);
+    return "[只读或不存在: " + path + "]";
+}
+
+// 路径规范化
+String vfsNorm(String p) {
+    if (p == null) return "/";
+    p = p.trim();
+    // 去掉 // /./ /../
+    while (p.contains("//")) p = p.replace("//", "/");
+    while (p.contains("/./")) p = p.replace("/./", "/");
+    if (!p.startsWith("/")) p = "/" + p;
+    return p;
+}
+
+// ======= /proc/sys/ =======
+String vfsReadProcSys(String path) {
+    Map cfg = loadAiConfig();
+    String key = path.replace("/proc/sys/", "");
+    if (key.equals("api_key") || key.equals("search_api_key")) {
+        String v = (String) cfg.get(key);
+        if (v == null || v.isEmpty()) return "(未设置)";
+        if (v.length() > 8) v = v.substring(0, 4) + "****" + v.substring(v.length() - 4);
+        return v;
+    }
+    String v = getAiConfig(key);
+    return v.isEmpty() ? "(未设置)" : v;
+}
+String vfsWriteProcSys(String path, String content) {
+    String key = path.replace("/proc/sys/", "");
+    if (key.equals("api_key") || key.equals("search_api_key")) return "[拒绝: api_key/search_api_key 不可覆写]";
+    String[] vk = {"model","ai_url","context_ttl","max_turns","search_provider","show_stats","debug","ai_prefix","search_rounds","temperature","pat_wake","sewarden"};
+    boolean valid = false; for (int i = 0; i < vk.length; i++) if (vk[i].equals(key)) { valid = true; break; }
+    if (!valid) return "[无效配置键: " + key + "]";
+    Map cfg = loadAiConfig(); cfg.put(key, content.trim()); saveAiConfig(cfg);
+    return null;
+}
+
+// ======= /proc/self/ =======
+String vfsReadProcSelf(String path, String senderUin, int chatType, String peerUin) {
+    if (path.equals("/proc/self/role")) return getRole(senderUin);
+    if (path.equals("/proc/self/memory_count")) return String.valueOf(getMemoryCount(senderUin));
+    if (path.equals("/proc/self/chat")) return peerUin + "_" + chatType;
+    if (path.equals("/proc/self/listening")) {
+        if (listenSessions == null) listenSessions = readStringSet(pluginPath + "/config/listen_sessions.txt");
+        return listenSessions.contains(peerUin + "_" + chatType) ? "yes" : "no";
+    }
+    return "[未知: " + path + "]";
+}
+
+// ======= /proc/prompt/ =======
+String vfsReadProcPrompt(String path) {
+    if (path.equals("/proc/prompt/active")) return getActivePersona();
+    if (path.equals("/proc/prompt/slots")) {
+        List personas = listPersonas();
+        StringBuilder sb = new StringBuilder();
+        String cur = getActivePersona();
+        for (int i = 0; i < personas.size(); i++) {
+            String p = (String) personas.get(i);
+            sb.append(p);
+            if (p.equals(cur)) sb.append(" [active]");
+            sb.append("\n");
+        }
+        return sb.toString().trim();
+    }
+    return "[未知: " + path + "]";
+}
+String vfsWritePromptActive(String content) {
+    String target = content.trim();
+    List personas = listPersonas();
+    boolean found = false;
+    for (int i = 0; i < personas.size(); i++) { if (personas.get(i).equals(target)) { found = true; break; } }
+    if (!found) return "[人设不存在: " + target + "]";
+    if (target.equals(getActivePersona())) return null; // 已是当前，无需切换
+    setActivePersona(target);
+    return null;
+}
+
+// ======= /etc/ =======
+String vfsMapEtcPath(String path) {
+    String file = path.substring(5); // strip "/etc/"
+    if (file.startsWith("prompt/")) return pluginPath + "/config/" + file;
+    if (file.startsWith("skills/")) return pluginPath + "/config/" + file;
+    return pluginPath + "/config/" + file;
+}
+String vfsReadEtc(String path) {
+    String real = vfsMapEtcPath(path);
+    if (new File(real).isDirectory()) {
+        String[] files = new File(real).list();
+        if (files == null) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+        return sb.toString().trim();
+    }
+    return readFileString(real);
+}
+String vfsWriteEtc(String path, String content, boolean append) {
+    String real = vfsMapEtcPath(path);
+    return writeFileString(real, content, append);
+}
+
+// ======= /ctx/ =======
+String vfsReadCtx(String path) {
+    if (path.equals("/ctx/")) {
+        File dir = new File(pluginPath + "/config/ctx");
+        String[] files = dir.list();
+        if (files == null || files.length == 0) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+        return sb.toString().trim();
+    }
+    String real = pluginPath + "/config/ctx/" + path.replace("/ctx/", "");
+    return readFileString(real);
+}
+
+// ======= /var/log/ =======
+String vfsReadVarLog(String path) {
+    if (path.equals("/var/log/messages")) return readFileString(pluginPath + "/config/log.txt");
+    if (path.equals("/var/log/errors")) return readFileString(pluginPath + "/config/error.txt");
+    return "[未知日志: " + path + "]";
+}
+
+// ======= /dev/ =======
+// 消息总线 — 只读 FD，由 onMsg 注入
+static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
+String vfsReadDev(String path, String peerUin, int chatType) {
+    if (path.equals("/dev/msg-stream")) {
+        if (msgBus.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < msgBus.size(); i++) sb.append(msgBus.get(i)).append("\n");
+        msgBus.clear();
+        return sb.toString().trim();
+    }
+    return "[只写设备或不存在]";
+}
+void vfsWriteDevOut(String content, String peerUin, int chatType) {
+    String prefix = "1".equals(getAiConfig("ai_prefix")) ? "[AI] " : "";
+    sendMsg(peerUin, prefix + content, chatType);
+}
+void vfsWriteDevExit(String content) {
+    // daemon 退出信号，由 shell exec 的 & 分支处理
+}
+
+// ======= /persist/ /tmp/ (共享存储) =======
+static Map vfsTmp = new HashMap(); // 内存虚拟 /tmp
+String vfsReadPersist(String path) {
+    return readFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""));
+}
+String vfsWritePersist(String path, String content, boolean append) {
+    return writeFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""), content, append);
+}
+String vfsReadTmp(String path) {
+    Object v = vfsTmp.get(path);
+    return v != null ? v.toString() : "(文件不存在)";
+}
+String vfsWriteTmp(String path, String content, boolean append) {
+    if (vfsTmp.size() > 50) return "[tmp 文件数超限 50]";
+    String existing = (String) vfsTmp.get(path);
+    if (existing != null && existing.length() + content.length() > 100000) return "[tmp 单文件超限 100KB]";
+    if (append && existing != null) content = existing + content;
+    vfsTmp.put(path, content);
+    return null;
+}
+
+// ======= /src/ /proc/ps/free/uptime =======
+String vfsReadSrc() { return readFileString(pluginPath + "/main.java"); }
+static long wsStartTime = System.currentTimeMillis();
+String vfsReadProcPS() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("PID  STAT  CMD\n");
+    for (Object e : daemons.entrySet()) {
+        Map.Entry en = (Map.Entry) e;
+        Thread t = (Thread) en.getValue();
+        String stat = t.isAlive() ? "S" : "Z";
+        sb.append(en.getKey()).append("    ").append(stat).append("    corax-daemon\n");
+    }
+    if (daemons.isEmpty()) sb.append("(无活跃任务)\n");
+    return sb.toString();
+}
+String vfsReadProcFree() {
+    return "daemons: " + daemons.size() + " / 10";
+}
+String vfsReadProcUptime() {
+    long uptime = (System.currentTimeMillis() - wsStartTime) / 1000;
+    return uptime + "s (" + (uptime / 3600) + "h " + ((uptime % 3600) / 60) + "m)";
+}
+String vfsReadProcStatus(String path) {
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/status", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        Thread t = (Thread) daemons.get(pid);
+        if (t == null) return "[pid 不存在]";
+        return t.isAlive() ? "running" : "terminated";
+    } catch (Exception e) { return "[解析失败]"; }
+}
+String vfsReadProcStdout(String path) {
+    // daemon stdout 从队列读
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/stdout", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        List q = (List) daemonOutputs.get(pid);
+        if (q == null || q.isEmpty()) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < q.size(); i++) sb.append(q.get(i)).append("\n");
+        q.clear();
+        return sb.toString().trim();
+    } catch (Exception e) { return "[解析失败]"; }
+}
+String vfsWriteProcKill(String path) {
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/kill", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        Thread t = (Thread) daemons.get(pid);
+        if (t != null && t.isAlive()) t.interrupt();
+        daemons.remove(pid);
+        daemonOutputs.remove(pid);
+        return null;
+    } catch (Exception e) { return "[解析失败]"; }
+}
+
+// ======= /var/ =======
+String vfsWriteVarDb(String sql) {
+    // 白名单 SQL
+    String upper = sql.trim().toUpperCase();
+    if (upper.contains("DROP") || upper.contains("ALTER") || upper.contains("ATTACH") || upper.contains("VACUUM")) {
+        return "[拒绝: 不允许 DROP/ALTER/ATTACH/VACUUM]";
+    }
+    try { getDb().execSQL(sql); return null; }
+    catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
+}
+
+// ======= 辅助 =======
+String readFileString(String path) {
+    try {
+        File f = new File(path);
+        if (!f.exists()) return "(文件不存在)";
+        if (f.isDirectory()) {
+            String[] files = f.list();
+            if (files == null || files.length == 0) return "(空)";
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+            return sb.toString().trim();
+        }
+        BufferedReader br = new BufferedReader(new FileReader(f));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = br.readLine()) != null) sb.append(line).append("\n");
+        br.close();
+        return sb.toString().trim();
+    } catch (Exception e) { return "[读取失败: " + e.getMessage() + "]"; }
+}
+String writeFileString(String path, String content, boolean append) {
+    try {
+        File f = new File(path);
+        File parent = f.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        if (append && f.exists()) {
+            FileWriter fw = new FileWriter(f, true);
+            fw.write(content);
+            fw.close();
+        } else {
+            PrintWriter pw = new PrintWriter(new FileWriter(f));
+            pw.print(content);
+            pw.close();
+        }
+        return null;
+    } catch (Exception e) { return "[写入失败: " + e.getMessage() + "]"; }
+}
+
+// ==================== Corax-Shell 执行器 ====================
+static Map daemons = new HashMap();
+static Map daemonOutputs = new HashMap();
+static int nextDaemonPid = 1;
+
+// 单行命令解析与执行
+String shellExecLine(String line, String senderUin, String peerUin, int chatType) {
+    if (line == null || line.trim().isEmpty()) return "";
+    line = line.trim();
+
+    // 后台执行 &
+    boolean bg = line.endsWith("&");
+    if (bg) line = line.substring(0, line.length() - 1).trim();
+
+    // 重定向检测
+    String outRedir = null;
+    boolean outAppend = false;
+    int gtIdx = line.indexOf(">");
+    if (gtIdx > 0) {
+        if (line.charAt(gtIdx + 1) == '>') {
+            outAppend = true;
+            outRedir = line.substring(gtIdx + 2).trim();
+        } else {
+            outRedir = line.substring(gtIdx + 1).trim();
+        }
+        line = line.substring(0, gtIdx).trim();
+    }
+
+    // 管道
+    String[] cmds = line.split("\\|");
+    String pipeIn = "";
+
+    for (int ci = 0; ci < cmds.length; ci++) {
+        String[] parts = cmds[ci].trim().split("\\s+");
+        if (parts.length == 0 || parts[0].isEmpty()) continue;
+        String cmd = parts[0];
+        String[] args = new String[parts.length - 1];
+        for (int ai = 1; ai < parts.length; ai++) args[ai - 1] = parts[ai];
+
+        String result = shellBuiltin(cmd, args, pipeIn, senderUin, peerUin, chatType);
+        pipeIn = (result != null) ? result : "";
+    }
+
+    // 重定向写入
+    if (outRedir != null && !pipeIn.isEmpty()) {
+        vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
+    }
+
+    // 后台
+    if (bg) {
+        final String finalLine = line;
+        final String su = senderUin, pu = peerUin;
+        final int ct = chatType;
+        final int p = nextDaemonPid++;
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try { shellExecLine(finalLine, su, pu, ct); }
+                catch (Exception e) {
+                    List q = (List) daemonOutputs.get(p);
+                    if (q == null) { q = java.util.Collections.synchronizedList(new ArrayList()); daemonOutputs.put(p, q); }
+                    q.add("stderr: " + e.getMessage());
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        daemons.put(p, t);
+        return "[pid:" + p + "]";
+    }
+
+    return outRedir != null ? "" : pipeIn;
+}
+
+// 内置命令
+String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, String peerUin, int chatType) {
+    try {
+        if (cmd.equals("echo")) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < args.length; i++) { if (i > 0) sb.append(" "); sb.append(args[i]); }
+            return sb.toString();
+        }
+        if (cmd.equals("cat")) {
+            if (args.length == 0) return stdin;
+            String path = args[0];
+            if (path.startsWith("-")) path = args.length > 1 ? args[1] : args[0];
+            if (path.equals("-")) return stdin;
+            return vfsRead(path, senderUin, peerUin, chatType);
+        }
+        if (cmd.equals("ls")) {
+            String path = args.length > 0 ? args[0] : "/";
+            return vfsRead(path, senderUin, peerUin, chatType);
+        }
+        if (cmd.equals("grep")) {
+            boolean invert = false;
+            String pattern = null;
+            for (int i = 0; i < args.length; i++) {
+                if (args[i].equals("-v")) invert = true;
+                else if (pattern == null) pattern = args[i];
+            }
+            if (pattern == null) return "grep: 需要模式";
+            String[] lines = stdin.split("\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                boolean match = lines[i].contains(pattern);
+                if (invert) match = !match;
+                if (match) sb.append(lines[i]).append("\n");
+            }
+            return sb.toString().trim();
+        }
+        if (cmd.equals("wc")) {
+            boolean linesOnly = args.length > 0 && args[0].equals("-l");
+            String[] lines = stdin.split("\n");
+            int count = stdin.isEmpty() ? 0 : lines.length;
+            return linesOnly ? String.valueOf(count) : count + " " + stdin.length();
+        }
+        if (cmd.equals("head")) {
+            int n = 10;
+            if (args.length > 0 && args[0].equals("-n") && args.length > 1) { try { n = Integer.parseInt(args[1]); } catch (Exception e) {} }
+            String[] lines = stdin.split("\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < Math.min(n, lines.length); i++) sb.append(lines[i]).append("\n");
+            return sb.toString().trim();
+        }
+        if (cmd.equals("tail")) {
+            int n = 10;
+            if (args.length > 0 && args[0].equals("-n") && args.length > 1) { try { n = Integer.parseInt(args[1]); } catch (Exception e) {} }
+            String[] lines = stdin.split("\n");
+            int start = Math.max(0, lines.length - n);
+            StringBuilder sb = new StringBuilder();
+            for (int i = start; i < lines.length; i++) sb.append(lines[i]).append("\n");
+            return sb.toString().trim();
+        }
+        if (cmd.equals("date")) {
+            return getCurrentTime();
+        }
+        if (cmd.equals("sleep")) {
+            if (args.length > 0) {
+                try { Thread.sleep(Long.parseLong(args[0]) * 1000L); } catch (Exception e) {}
+            }
+            return "";
+        }
+
+        // Corax 命令
+        if (cmd.equals("corax-search")) {
+            return doWebSearch(args.length > 0 ? args[0] : "");
+        }
+        if (cmd.equals("corax-fetch")) {
+            return doFetchPage(args.length > 0 ? args[0] : "");
+        }
+        if (cmd.equals("corax-mem-create")) {
+            boolean pub = false; String tags = "", content = "";
+            int ai = 0;
+            if (ai < args.length && args[ai].equals("--public")) { pub = true; ai++; }
+            if (ai < args.length) tags = args[ai++];
+            StringBuilder sb = new StringBuilder();
+            for (int i = ai; i < args.length; i++) { if (i > ai) sb.append(" "); sb.append(args[i]); }
+            content = sb.toString();
+            if (tags.isEmpty() || content.isEmpty()) return "用法: corax-mem-create [--public] <tags> <content>";
+            boolean ok = storeMemory(senderUin, content, tags, pub ? "public" : "private", pub ? senderUin : senderUin);
+            return ok ? "已创建" : "创建失败";
+        }
+        if (cmd.equals("corax-mem-rm")) {
+            if (args.length < 1) return "用法: corax-mem-rm <id>";
+            long id = Long.parseLong(args[0]);
+            boolean ok = deleteMemoryById(id, senderUin, getRole(senderUin));
+            return ok ? "已删除 #" + id : "删除失败";
+        }
+        if (cmd.equals("corax-mem-tag")) {
+            boolean pub = args.length > 0 && args[0].equals("--public");
+            String tag = pub ? (args.length > 1 ? args[1] : "") : (args.length > 0 ? args[0] : "");
+            if (tag.isEmpty()) return "用法: corax-mem-tag [--public] <tag>";
+            List results = pub ? searchPublicMemoriesByTag(tag) : searchMemoriesByTag(senderUin, tag);
+            return formatMemList(results, false);
+        }
+        if (cmd.equals("corax-mem-search")) {
+            boolean pub = args.length > 0 && args[0].equals("--public");
+            String kw = pub ? (args.length > 1 ? args[1] : "") : (args.length > 0 ? args[0] : "");
+            if (kw.isEmpty()) return "用法: corax-mem-search [--public] <keyword>";
+            List results = pub ? searchPublicMemories(kw) : searchMemories(senderUin, kw);
+            return formatMemList(results, false);
+        }
+        if (cmd.equals("corax-skill")) {
+            if (args.length < 1) return "用法: corax-skill <skill名称>";
+            return loadSkillContent(args[0]);
+        }
+        if (cmd.equals("corax-listen")) {
+            if (args.length < 1) return "用法: corax-listen <on|off|status>";
+            if (args[0].equals("on")) {
+                addToList(pluginPath + "/config/listen_sessions.txt", peerUin + "_" + chatType);
+                if (listenSessions != null) listenSessions.add(peerUin + "_" + chatType);
+                return "监听已开启";
+            }
+            if (args[0].equals("off")) {
+                removeFromList(pluginPath + "/config/listen_sessions.txt", peerUin + "_" + chatType);
+                if (listenSessions != null) listenSessions.remove(peerUin + "_" + chatType);
+                return "监听已关闭";
+            }
+            if (args[0].equals("status")) {
+                if (listenSessions == null) listenSessions = readStringSet(pluginPath + "/config/listen_sessions.txt");
+                return listenSessions.contains(peerUin + "_" + chatType) ? "已开启" : "已关闭";
+            }
+            return "用法: corax-listen <on|off|status>";
+        }
+        if (cmd.equals("corax-help")) {
+            return "Corax-Shell v4.4.0\n\n"
+                + "内置命令: ls cat echo grep wc head tail date sleep\n"
+                + "Corax命令: corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
+                + "管道/重定向: | > >> &\n"
+                + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
+                + "查阅 /usr/share/doc/corax/ 了解项目架构";
+        }
+        return cmd + ": command not found, try corax-help";
+    } catch (Exception e) {
+        return cmd + ": " + e.getMessage();
+    }
+}
+
+String formatMemList(List results, boolean isPublic) {
+    if (results == null || results.isEmpty()) return "(无)";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < results.size(); i++) {
+        Map m = (Map) results.get(i);
+        sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
+    }
+    return sb.toString().trim();
+}
+
+// 加载技能内容
+String loadSkillContent(String name) {
+    if (!name.endsWith(".skill.txt")) name += ".skill.txt";
+    return readFileString(pluginPath + "/config/skills/" + name);
+}
+
+// 消息总线注入 — onMsg 调用
+void vfsPushMsgBus(String msgJson) {
+    msgBus.add(msgJson);
+    if (msgBus.size() > 100) msgBus.remove(0);
+}
+
+
 // ==================== Tool 辅助 ====================
 String getToolArg(JSONObject tc, String key) {
     try { return new JSONObject(tc.getJSONObject("function").getString("arguments")).optString(key, ""); } catch (Exception e) { return ""; }
@@ -2979,6 +3166,10 @@ public void onPaiYiPai(String peerUin, int chatType, String operatorUin) {
 // ==================== 路由 ====================
 public void onMsg(Object msg) {
     if (msg == null) return;
+    
+    // 推送消息总线 (供 workspace daemon 订阅)
+    String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\"" + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200)) + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
+    vfsPushMsgBus(msgJson);
     
     // 消息队列：正在处理消息时缓存新消息，不丢弃
     if (aiProcessing) {
