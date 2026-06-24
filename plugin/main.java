@@ -1413,9 +1413,8 @@ dumpMsgs.put(dj);
     }
 
     if (ai2TCs != null && ai2TCs.length() > 0) {
-        List memOps = new ArrayList(); List searchCalls = new ArrayList();
         List skillCalls = new ArrayList();
-    List shellCalls = new ArrayList(); List coldLookups = new ArrayList();
+        List shellCalls = new ArrayList();
         for (int i = 0; i < ai2TCs.length(); i++) {
             JSONObject tc = ai2TCs.getJSONObject(i);
             String fn = tc.getJSONObject("function").getString("name");
@@ -1451,9 +1450,6 @@ dumpMsgs.put(dj);
                 ctxListen.put("_ts", System.currentTimeMillis());
                 ctx.add(ctxListen);
             }
-                  }
-                }
-            }
         }
         
         int maxSr = 3;
@@ -1461,25 +1457,37 @@ dumpMsgs.put(dj);
         int sr = 0;
         
         while (!shellCalls.isEmpty()) {
-            String lastOutput = (String) shellCalls.get(0);
-            String fn = tc.getJSONObject("function").getString("name");
-            String sq = getToolArg(tc, fn.equals("fetch_page") ? "url" : "query");
-            if (sq.isEmpty()) break;
             sr++;
-            if (debug) sendMsg(peerUin, "[AI] 正在检索: " + sq, chatType);
-            String result = fn.equals("fetch_page") ? doFetchPage(sq) : doWebSearch(sq);
-            int resultCap = fn.equals("fetch_page") ? 6000 : 2000;
-            if (result.length() > resultCap) result = result.substring(0, resultCap) + "...";
-            String note;
             if (sr >= maxSr) {
-                note = "已达搜索上限。你已经没有可用的工具了，必须基于以上所有搜索结果直接回答用户。只输出纯文本，不要尝试调用任何工具。";
-            } else {
-                note = "基于以上搜索结果回答用户。如果当前信息已足够则直接回答；如果确实不够请再调一次 search_web（仅调函数，不输出content）。";
+                JSONObject forceMsg = new JSONObject();
+                forceMsg.put("role", "system");
+                forceMsg.put("content", "已达 shell 调用上限 (" + maxSr + "轮)。基于以上所有结果，现在必须直接回复用户。");
+                ai2Msgs.put(forceMsg);
+                shellCalls.clear();
+                Map sr2 = callAI("", ai2Prompt, ai2Msgs, 8192, null); totalCalls++;
+                if (sr2 != null) {
+                    String r2c = (String) sr2.getOrDefault("content", "");
+                    if (!r2c.isEmpty()) {
+                        String[] segs = r2c.split("\\[SPLIT\\]");
+                        for (int si = 0; si < segs.length; si++) {
+                            String seg = segs[si].trim();
+                            if ("1".equals(getAiConfig("ai_prefix"))) seg = "[AI] " + seg;
+                            if (!seg.isEmpty()) {
+                                if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
+                                else sendMsg(peerUin, seg, chatType);
+                                hasSentReply = true;
+                            }
+                        }
+                        addToContext(ctx, "assistant", r2c, null);
+                    } else if (!hasSentReply) {
+                        sendMsg(peerUin, "[AI] 根据已有信息无法回答", chatType);
+                        hasSentReply = true;
+                    }
+                }
+                break;
             }
-            JSONObject srm = new JSONObject(); srm.put("role", "system"); srm.put("content", "<search q=\"" + sq + "\" t=\"" + getCurrentTime() + "\">\n" + result + "\n</search>\n" + note);
-            ai2Msgs.put(srm);
             shellCalls.clear();
-            Map sr2 = callAI("", ai2Prompt, ai2Msgs, 8192, sr >= maxSr ? null : ai2Tools); totalCalls++;
+            Map sr2 = callAI("", ai2Prompt, ai2Msgs, 8192, ai2Tools); totalCalls++;
             if (sr2 != null) {
                 try { totalPt += Integer.parseInt(String.valueOf(sr2.get("prompt_tokens"))); } catch (Exception e) { }
                 try { totalCt += Integer.parseInt(String.valueOf(sr2.get("completion_tokens"))); } catch (Exception e) { }
@@ -1493,24 +1501,32 @@ dumpMsgs.put(dj);
                             if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
                             else sendMsg(peerUin, seg, chatType);
                             hasSentReply = true;
-                            try { Thread.sleep(150); } catch (Exception ignored) { }
                         }
                     }
-                addToContext(ctx, "assistant", r2c, null); 
+                    addToContext(ctx, "assistant", r2c, null);
                 } else if (!hasSentReply) {
                     sendMsg(peerUin, "[AI] 没找到相关内容，换个说法试试", chatType);
                     hasSentReply = true;
                 }
-                if (sr >= maxSr) break;
                 JSONArray sr2tc = null; if (sr2.containsKey("tool_calls")) sr2tc = (JSONArray) sr2.get("tool_calls");
                 if (sr2tc != null) for (int i = 0; i < sr2tc.length(); i++) {
                     JSONObject rtc = sr2tc.getJSONObject(i);
                     String rfn = rtc.getJSONObject("function").getString("name");
-                    if (rfn.equals("search_web") || rfn.equals("fetch_page")) shellCalls.add(rtc);
-                    else if (rfn.equals("call_skill")) {
-                       String cmd = getToolArg(rtc, "command"); 
-                       if (!cmd.isEmpty()) skillCalls.add(rtc);
-                    }
+                    if (rfn.equals("shell")) {
+                        String scmd = getToolArg(rtc, "cmd");
+                        if (!scmd.isEmpty()) {
+                            boolean q = scmd.contains("--quiet");
+                            if (q) scmd = scmd.replace("--quiet", "").trim();
+                            String out = shellExecLine(scmd, senderUin, peerUin, chatType);
+                            if (!q && !out.isEmpty()) {
+                                JSONObject srm = new JSONObject();
+                                srm.put("role", "system");
+                                srm.put("content", "<shell_output>\n" + out + "\n</shell_output>\n继续基于以上输出处理。任务完成则直接回复用户。");
+                                ai2Msgs.put(srm);
+                                shellCalls.add(out);
+                            }
+                        }
+                    } else if (rfn.equals("call_skill")) skillCalls.add(rtc);
                     else executeMemoryCall(rtc, rfn, senderUin, userRole);
                 }
             } else break;
