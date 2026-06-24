@@ -2232,10 +2232,10 @@ void vfsWriteDevExit(String content) {
 // ======= /persist/ /tmp/ (共享存储) =======
 static Map vfsTmp = new HashMap(); // 内存虚拟 /tmp
 String vfsReadPersist(String path) {
-    return readFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""));
+    return readFileString(pluginPath + "/shared-space/" + path.replace("/persist/", ""));
 }
 String vfsWritePersist(String path, String content, boolean append) {
-    return writeFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""), content, append);
+    return writeFileString(pluginPath + "/shared-space/" + path.replace("/persist/", ""), content, append);
 }
 String vfsReadTmp(String path) {
     Object v = vfsTmp.get(path);
