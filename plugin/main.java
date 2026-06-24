@@ -137,7 +137,7 @@ String loadPersona() {
             sb.append(line).append("\n");
         }
         br.close();
-    } catch (Exception e) { log("error.txt", "loadPersona: " + e.getMessage()); return ""; }
+    } catch (Exception e) { this.log("error.txt", "loadPersona: " + e.getMessage()); return ""; }
     cachedPersona = sb.toString().trim();
     personaFileMtime = mtime;
     return cachedPersona;
@@ -157,7 +157,7 @@ String loadSystemPrompt() {
         cachedSystemPrompt = sb.toString().trim();
         systemPromptFileMtime = mtime;
         return cachedSystemPrompt;
-    } catch (Exception e) { log("error.txt", "loadSystemPrompt: " + e.getMessage()); return ""; }
+    } catch (Exception e) { this.log("error.txt", "loadSystemPrompt: " + e.getMessage()); return ""; }
 }
 
 List loadWakeWords() {
@@ -181,7 +181,7 @@ List loadWakeWords() {
                 }
             }
         }
-    } catch (Exception e) { log("error.txt", "loadWakeWords: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "loadWakeWords: " + e.getMessage()); }
     cachedWakeWords = words;
     wakeWordsFileMtime = mtime;
     return words;
@@ -227,7 +227,7 @@ String loadSkills() {
                     else desc = firstLine.trim();
             }
             if (!desc.isEmpty()) { sb.append(skillName).append(": ").append(desc).append("\n"); }
-        } catch (Exception e) { log("error.txt", "loadSkills: " + e.getMessage()); }
+        } catch (Exception e) { this.log("error.txt", "loadSkills: " + e.getMessage()); }
     }
     cachedSkills = sb.toString().trim();
     skillsDirMtime = latestMtime;
@@ -281,7 +281,7 @@ void setDefaultAccountConfig(String type) {
         PrintWriter pw = new PrintWriter(new FileWriter(pluginPath + "/config/default_account.txt"));
         pw.println(type);
         pw.close();
-    } catch (Exception e) { log("error.txt", "setDefaultAccountConfig: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "setDefaultAccountConfig: " + e.getMessage()); }
 }
 
 boolean canUseAi(String uin) {
@@ -304,7 +304,7 @@ Map getTagPool(String uin) {
     try {
         c = getDb().rawQuery("SELECT tag, count FROM tag_pool WHERE uin = ? ORDER BY count DESC, tag ASC", new String[]{uin});
         while (c.moveToNext()) pool.put(c.getString(0), c.getInt(1));
-    } catch (Exception e) { log("error.txt", "getTagPool: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getTagPool: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     tagPoolCache = pool;
     tagPoolCacheTime = now;
@@ -318,7 +318,7 @@ Map getPublicTagPool() {
     try {
         c = getDb().rawQuery("SELECT tag, count FROM tag_pool WHERE uin = 'PUBLIC' ORDER BY count DESC, tag ASC", null);
         while (c.moveToNext()) pool.put(c.getString(0), c.getInt(1));
-    } catch (Exception e) { log("error.txt", "getPublicTagPool: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getPublicTagPool: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return pool;
 }
@@ -347,7 +347,7 @@ void updateTagPool(String uin, String tagsStr, int delta) {
                 db.delete("tag_pool", "uin = ? AND tag = ?", new String[]{uin, t});
         }
         db.setTransactionSuccessful();
-    } catch (Exception e) { log("error.txt", "updateTagPool: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "updateTagPool: " + e.getMessage()); }
     finally { db.endTransaction(); }
     if (!"PUBLIC".equals(uin)) { tagPoolCache = null; tagPoolCacheTime = 0; tagPoolCacheUin = ""; }
 }
@@ -399,7 +399,7 @@ void rebuildTagPool(String uin) {
         c.close();
         db.setTransactionSuccessful();
     } catch (Exception e) {
-        log("error.txt", "rebuildTagPool: " + e.getMessage());
+        this.log("error.txt", "rebuildTagPool: " + e.getMessage());
     } finally {
         db.endTransaction();
     }
@@ -444,7 +444,7 @@ void rebuildPublicTagPool() {
         c.close();
         db.setTransactionSuccessful();
     } catch (Exception e) {
-        log("error.txt", "rebuildPublicTagPool: " + e.getMessage());
+        this.log("error.txt", "rebuildPublicTagPool: " + e.getMessage());
     } finally {
         db.endTransaction();
     }
@@ -495,7 +495,7 @@ boolean storeMemory(String uin, String content, String tags, String scope, Strin
             return true;
         }
         return false;
-    } catch (Exception e) { log("error.txt", "storeMemory: " + e.getMessage()); return false; }
+    } catch (Exception e) { this.log("error.txt", "storeMemory: " + e.getMessage()); return false; }
 }
 
 void touchMemory(long id) {
@@ -531,7 +531,7 @@ List searchMemories(String uin, String keyword) {
             results.add(m);
             touchMemory(c.getLong(0));
         }
-    } catch (Exception e) { log("error.txt", "searchMem: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "searchMem: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -553,7 +553,7 @@ List getStrataPrivate(String uin) {
             m.put("pinned", c.getInt(4));
             all.add(m);
         }
-    } catch (Exception e) { log("error.txt", "getStrataPrivate: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getStrataPrivate: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return all;
 }
@@ -578,7 +578,7 @@ List getStrataPublic() {
             m.put("record_uin", c.getString(7) != null ? c.getString(7) : "");
             all.add(m);
         }
-    } catch (Exception e) { log("error.txt", "getStrataPublic: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getStrataPublic: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return all;
 }
@@ -596,7 +596,7 @@ List getMyMemories(String uin, int limit) {
             m.put("tags", c.getString(2) != null ? c.getString(2) : "");
             results.add(m);
         }
-    } catch (Exception e) { log("error.txt", "getMyMemories: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getMyMemories: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -615,7 +615,7 @@ List getPublicMemories(int limit) {
             m.put("tags", c.getString(2) != null ? c.getString(2) : "");
             results.add(m);
         }
-    } catch (Exception e) { log("error.txt", "getPublicMemories: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "getPublicMemories: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -649,7 +649,7 @@ int deleteMemoriesByKeyword(String uin, String keyword) {
         while (c.moveToNext()) { String tags = c.getString(0); if (tags != null && !tags.trim().isEmpty()) updateTagPool(uin, tags, -1); }
         c.close();
         return getDb().delete("memories", "uin = ? AND scope = 'private' AND content LIKE ?", new String[]{uin, "%" + keyword + "%"});
-    } catch (Exception e) { log("error.txt", "deleteMemByKw: " + e.getMessage()); return 0; }
+    } catch (Exception e) { this.log("error.txt", "deleteMemByKw: " + e.getMessage()); return 0; }
 }
 
 List searchMemoriesByTag(String uin, String tag) {
@@ -671,7 +671,7 @@ List searchMemoriesByTag(String uin, String tag) {
             touchMemory(c.getLong(0));
             boostWeight(c.getLong(0), 3);
         }
-    } catch (Exception e) { log("error.txt", "searchMemByTag: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "searchMemByTag: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -694,7 +694,7 @@ List searchPublicMemoriesByTag(String tag) {
             results.add(m);
             touchMemory(c.getLong(0));
         }
-    } catch (Exception e) { log("error.txt", "searchPubByTag: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "searchPubByTag: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -717,7 +717,7 @@ List searchPublicMemories(String keyword) {
             results.add(m);
             touchMemory(c.getLong(0));
         }
-    } catch (Exception e) { log("error.txt", "searchPubMem: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "searchPubMem: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
     return results;
 }
@@ -1158,7 +1158,7 @@ void saveCtxToDisk(String peerUin, int chatType) {
         PrintWriter pw = new PrintWriter(new FileWriter(new File(dir, key + ".json")));
         pw.print(arr.toString());
         pw.close();
-    } catch (Exception e) { log("error.txt", "saveCtx: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "saveCtx: " + e.getMessage()); }
 }
 
 void addToContext(List ctx, String role, String content, String name) {
@@ -1218,7 +1218,7 @@ Map callAI(String configPrefix, String systemPrompt, JSONArray messages, int max
         String line;
         while ((line = br.readLine()) != null) resp.append(line);
         br.close();
-        if (code != 200) { log("error.txt", "AI HTTP " + code + ": " + resp.toString()); return null; }
+        if (code != 200) { this.log("error.txt", "AI HTTP " + code + ": " + resp.toString()); return null; }
         JSONObject jResp = new JSONObject(resp.toString());
         JSONArray choices = jResp.getJSONArray("choices");
         Map result = new HashMap();
@@ -1233,7 +1233,7 @@ Map callAI(String configPrefix, String systemPrompt, JSONArray messages, int max
             result.put("completion_tokens", usage.optInt("completion_tokens", 0));
         } else { result.put("prompt_tokens", 0); result.put("completion_tokens", 0); }
         return result;
-    } catch (Exception e) { log("error.txt", "callAI: " + e.getMessage()); return null; }
+    } catch (Exception e) { this.log("error.txt", "callAI: " + e.getMessage()); return null; }
     finally { if (conn != null) { try { conn.disconnect(); } catch (Exception ignored) { } } }
 }
 
@@ -1968,6 +1968,16 @@ dumpMsgs.put(dj);
         lastAssistantMsg = ai2Content.trim();
     }
     aiProcessing = false;
+    processQueue();
+}
+
+void processQueue() {
+    while (!msgQueue.isEmpty() && !aiProcessing) {
+        Object next = msgQueue.poll();
+        if (next != null) {
+            try { onMsg(next); } catch (Exception e) { this.log("error.txt", "processQueue: " + e.getMessage()); }
+        }
+    }
 }
 
 // ==================== AI 配置 ====================
@@ -2002,7 +2012,7 @@ Map loadAiConfig() {
                 if (eq > 0) cfg.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
             }
             br.close();
-        } catch (Exception e) { log("error.txt", "loadAiConfig: " + e.getMessage()); }
+        } catch (Exception e) { this.log("error.txt", "loadAiConfig: " + e.getMessage()); }
     }
     aiConfigCache = cfg;
     aiConfigCacheTime = now;
@@ -2019,7 +2029,7 @@ void saveAiConfig(Map cfg) {
         for (Object entry : cfg.entrySet()) { Map.Entry e = (Map.Entry) entry; pw.println(e.getKey() + "=" + e.getValue()); }
         pw.close();
         aiConfigCache = null; aiConfigCacheTime = 0;
-    } catch (Exception e) { log("error.txt", "saveAiConfig: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "saveAiConfig: " + e.getMessage()); }
 }
 
 String getAiConfig(String key) { Map cfg = loadAiConfig(); Object v = cfg.get(key); return v != null ? v.toString() : ""; }
@@ -2050,7 +2060,7 @@ Set readStringSet(String path) {
         String line;
         while ((line = br.readLine()) != null) { line = line.trim(); if (!line.isEmpty()) set.add(line); }
         br.close();
-    } catch (Exception e) { log("error.txt", "readStringSet: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "readStringSet: " + e.getMessage()); }
     return set;
 }
 
@@ -2062,7 +2072,7 @@ void writeStringSet(String path, Set set) {
         BufferedWriter bw = new BufferedWriter(new FileWriter(f));
         for (Object s : set) { bw.write(s + "\n"); }
         bw.flush(); bw.close();
-    } catch (Exception e) { log("error.txt", "writeStringSet: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "writeStringSet: " + e.getMessage()); }
 }
 
 void addToList(String path, String uin) { Set set = readStringSet(path); if (!set.contains(uin)) { set.add(uin); writeStringSet(path, set); } }
@@ -2170,7 +2180,7 @@ void writeLog(String senderUin, String command) {
         BufferedWriter bw = new BufferedWriter(new FileWriter(logFile, true));
         bw.write("[" + getCurrentTime() + "] [" + role + "] " + senderUin + " " + command);
         bw.newLine(); bw.flush(); bw.close();
-    } catch (Exception e) { log("error.txt", "writeLog: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "writeLog: " + e.getMessage()); }
 }
 
 // ==================== 切槽 ====================
@@ -2454,7 +2464,7 @@ long storeReminder(String uin, String peerUin, int chatType, String content, lon
         long id = getDb().insert("reminders", null, cv);
         if (id > 0) scheduleReminder(id, remindAt);
         return id;
-    } catch (Exception e) { log("error.txt", "storeReminder: " + e.getMessage()); return -1; }
+    } catch (Exception e) { this.log("error.txt", "storeReminder: " + e.getMessage()); return -1; }
 }
 
 void scheduleReminder(long id, long remindAt) {
@@ -2483,7 +2493,7 @@ void fireReminder(long id) {
             cv.put("fired", 1);
             getDb().update("reminders", cv, "id=?", new String[]{String.valueOf(id)});
         }
-    } catch (Exception e) { log("error.txt", "fireReminder: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "fireReminder: " + e.getMessage()); }
     finally { if (c != null) c.close(); }
 }
 
@@ -2592,7 +2602,7 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             try { last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null); if (last.moveToFirst()) { int lastId = last.getInt(0); getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId); } } catch (Exception e) { }
             finally { if (last != null) last.close(); }
         } else if (fname.equals("delete_memory")) { int id = getToolArgInt(tc, "id"); if (id > 0) deleteMemoryById(id, senderUin, userRole); }
-    } catch (Exception e) { log("error.txt", "execMem: " + e.getMessage()); }
+    } catch (Exception e) { this.log("error.txt", "execMem: " + e.getMessage()); }
 }
 // ==================== 命令处理 ====================
 void handleAiMemory(Object msg, String args) {
@@ -2970,6 +2980,12 @@ public void onPaiYiPai(String peerUin, int chatType, String operatorUin) {
 public void onMsg(Object msg) {
     if (msg == null) return;
     
+    // 消息队列：正在处理消息时缓存新消息，不丢弃
+    if (aiProcessing) {
+        if (msgQueue.size() >= MSG_QUEUE_MAX) msgQueue.poll();
+        msgQueue.offer(msg);
+        return;
+    }
     // v3.0: 冷启动预热，静默初始化内部状态
     if (!aiReady) {
         getDb();
