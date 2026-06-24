@@ -775,7 +775,7 @@ String buildStrataContext(String senderUin) {
     boolean hasPinned = false;
     for (int i = 0; i < privAll.size(); i++) {
         Map m = (Map) privAll.get(i);
-        int pinned = (Integer) m.get("pinned");
+        int pinned = Integer.parseInt(String.valueOf(m.get("pinned")));
         if (pinned == 1 && !seenPinned.contains(m.get("id"))) {
             if (!hasPinned) { ctx.append("<pinned/>\n"); hasPinned = true; }
             seenPinned.add(m.get("id"));
@@ -795,7 +795,7 @@ String buildStrataContext(String senderUin) {
         ctx.append("<archive/>\n");
         for (int i = 0; i < privAll.size() && count < topN; i++) {
             Map m = (Map) privAll.get(i);
-            int pinned = (Integer) m.get("pinned");
+            int pinned = Integer.parseInt(String.valueOf(m.get("pinned")));
             if (pinned == 1 && seenPinned.contains(m.get("id"))) continue;
             count++;
             ctx.append("#M").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
@@ -804,7 +804,7 @@ String buildStrataContext(String senderUin) {
                 String[] ta = tags.split(",");
                 for (int j = 0; j < ta.length; j++) hotTags.add(ta[j].trim().toLowerCase());
             }
-            touchMemory((Long) m.get("id"));
+            touchMemory(Long.parseLong(String.valueOf(m.get("id"))));
         }
     }
 
@@ -849,13 +849,13 @@ String buildPublicStrata() {
     boolean hasPinned = false;
     for (int i = 0; i < pubAll.size(); i++) {
         Map pm = (Map) pubAll.get(i);
-        int pinned = (Integer) pm.get("pinned");
+        int pinned = Integer.parseInt(String.valueOf(pm.get("pinned")));
         if (pinned == 1 && !seenPinned.contains(pm.get("id"))) {
             if (!hasPinned) { ctx.append("<public_pinned/>\n"); hasPinned = true; }
             seenPinned.add(pm.get("id"));
-            int cred = (Integer) pm.get("credibility");
+            int cred = Integer.parseInt(String.valueOf(pm.get("credibility")));
             String ru = (String) pm.get("record_uin");
-            long accessed = getAccessedAt((Long) pm.get("id"));
+            long accessed = getAccessedAt(Long.parseLong(String.valueOf(pm.get("id"))));
             ctx.append("#PP").append(pm.get("id"))
                .append("[信:").append(cred).append(",由:").append(getRole(ru)).append("|UIN:").append(ru)
                .append(",活:").append(relativeTime(accessed)).append("] ")
@@ -874,12 +874,12 @@ String buildPublicStrata() {
         ctx.append("<public_archive/>\n");
         for (int i = 0; i < pubAll.size() && count < topN; i++) {
             Map pm = (Map) pubAll.get(i);
-            int pinned = (Integer) pm.get("pinned");
+            int pinned = Integer.parseInt(String.valueOf(pm.get("pinned")));
             if (pinned == 1 && seenPinned.contains(pm.get("id"))) continue;
             count++;
-            int cred = (Integer) pm.get("credibility");
+            int cred = Integer.parseInt(String.valueOf(pm.get("credibility")));
             String ru = (String) pm.get("record_uin");
-            long accessed = getAccessedAt((Long) pm.get("id"));
+            long accessed = getAccessedAt(Long.parseLong(String.valueOf(pm.get("id"))));
             ctx.append("#P").append(pm.get("id"))
                .append("[信:").append(cred).append(",由:").append(getRole(ru)).append("|UIN:").append(ru)
                .append(",活:").append(relativeTime(accessed)).append("] ")
