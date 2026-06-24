@@ -1415,7 +1415,6 @@ dumpMsgs.put(dj);
     }
 
     if (ai2TCs != null && ai2TCs.length() > 0) {
-        List skillCalls = new ArrayList();
         List shellCalls = new ArrayList();
         for (int i = 0; i < ai2TCs.length(); i++) {
             JSONObject tc = ai2TCs.getJSONObject(i);
@@ -1423,8 +1422,12 @@ dumpMsgs.put(dj);
             if (fn.equals("shell")) {
                 String cmd = getToolArg(tc, "cmd");
                 if (cmd.isEmpty()) continue;
-                boolean quiet = cmd.contains("--quiet");
-                if (quiet) cmd = cmd.replace("--quiet", "").trim();
+                String[] qparts = cmd.split("\\s+"); boolean quiet = false; StringBuilder cleanCmd = new StringBuilder();
+                for (int qi = 0; qi < qparts.length; qi++) {
+                    if (qparts[qi].equals("--quiet")) quiet = true;
+                    else { if (cleanCmd.length() > 0) cleanCmd.append(" "); cleanCmd.append(qparts[qi]); }
+                }
+                cmd = cleanCmd.toString().trim();
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
                 if (!quiet && !output.isEmpty()) {
@@ -1435,7 +1438,6 @@ dumpMsgs.put(dj);
                     shellCalls.add(output);
                 }
             }
-            else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
                 boolean enable = getToolArg(tc, "enable").equals("true");
                 String key = peerUin + "_" + chatType;
@@ -1517,8 +1519,12 @@ dumpMsgs.put(dj);
                     if (rfn.equals("shell")) {
                         String scmd = getToolArg(rtc, "cmd");
                         if (!scmd.isEmpty()) {
-                            boolean q = scmd.contains("--quiet");
-                            if (q) scmd = scmd.replace("--quiet", "").trim();
+                            String[] qp2 = scmd.split("\\s+"); boolean q = false; StringBuilder cc2 = new StringBuilder();
+                            for (int qi2 = 0; qi2 < qp2.length; qi2++) {
+                                if (qp2[qi2].equals("--quiet")) q = true;
+                                else { if (cc2.length() > 0) cc2.append(" "); cc2.append(qp2[qi2]); }
+                            }
+                            scmd = cc2.toString().trim();
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
                             if (!q && !out.isEmpty()) {
                                 JSONObject srm = new JSONObject();
@@ -1528,7 +1534,7 @@ dumpMsgs.put(dj);
                                 shellCalls.add(out);
                             }
                         }
-                    } else if (rfn.equals("call_skill")) skillCalls.add(rtc);
+                    }
                     else executeMemoryCall(rtc, rfn, senderUin, userRole);
                 }
             } else break;
@@ -2356,8 +2362,8 @@ String writeFileString(String path, String content, boolean append) {
 }
 
 // ==================== Corax-Shell 执行器 ====================
-static Map daemons = new HashMap();
-static Map daemonOutputs = new HashMap();
+static Map daemons = java.util.Collections.synchronizedMap(new HashMap());
+static Map daemonOutputs = java.util.Collections.synchronizedMap(new HashMap());
 static int nextDaemonPid = 1;
 
 // 单行命令解析与执行
@@ -2417,6 +2423,7 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
                     if (q == null) { q = java.util.Collections.synchronizedList(new ArrayList()); daemonOutputs.put(p, q); }
                     q.add("stderr: " + e.getMessage());
                 }
+                finally { daemons.remove(p); daemonOutputs.remove(p); }
             }
         });
         t.setDaemon(true);
@@ -2491,9 +2498,9 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return getCurrentTime();
         }
         if (cmd.equals("sleep")) {
-            if (args.length > 0) {
-                try { Thread.sleep(Long.parseLong(args[0]) * 1000L); } catch (Exception e) {}
-            }
+            if (args.length < 1) return "sleep: 需要秒数参数";
+            try { Thread.sleep(Long.parseLong(args[0].replaceAll("[^0-9]", "")) * 1000L); }
+            catch (Exception e) { return "sleep: 无效参数: " + args[0]; }
             return "";
         }
 
@@ -2505,15 +2512,17 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return doFetchPage(args.length > 0 ? args[0] : "");
         }
         if (cmd.equals("corax-mem-create")) {
-            boolean pub = false; String tags = "", content = "";
+            boolean pub = false; String tags = "", content = "", about = "";
             int ai = 0;
             if (ai < args.length && args[ai].equals("--public")) { pub = true; ai++; }
+            if (ai < args.length && args[ai].startsWith("--about=")) { about = args[ai].substring(8); ai++; }
             if (ai < args.length) tags = args[ai++];
             StringBuilder sb = new StringBuilder();
             for (int i = ai; i < args.length; i++) { if (i > ai) sb.append(" "); sb.append(args[i]); }
             content = sb.toString();
-            if (tags.isEmpty() || content.isEmpty()) return "用法: corax-mem-create [--public] <tags> <content>";
-            boolean ok = storeMemory(senderUin, content, tags, pub ? "public" : "private", pub ? senderUin : senderUin);
+            if (tags.isEmpty() || content.isEmpty()) return "用法: corax-mem-create [--public] [--about=<uin>] <tags> <content>";
+            String subject = about.isEmpty() ? (pub ? "" : senderUin) : about;
+            boolean ok = storeMemory(senderUin, content, tags, pub ? "public" : "private", subject);
             return ok ? "已创建" : "创建失败";
         }
         if (cmd.equals("corax-mem-rm")) {

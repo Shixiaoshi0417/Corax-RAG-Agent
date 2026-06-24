@@ -25,7 +25,7 @@ cat /proc/sys/temperature
 |------|------|
 | `corax-search <query>` | 联网搜索 |
 | `corax-fetch <url>` | 抓取网页全文 |
-| `corax-mem-create [--public] <tags> <content>` | 创建记忆 |
+| `corax-mem-create [--public] [--about=<uin>] <tags> <content>` | 创建记忆 |
 | `corax-mem-rm <id>` | 删除记忆 |
 | `corax-mem-tag [--public] <tag>` | 按标签搜索记忆 |
 | `corax-mem-search [--public] <keyword>` | 按内容搜索记忆 |
