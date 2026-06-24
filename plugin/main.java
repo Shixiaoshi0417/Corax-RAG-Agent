@@ -38,6 +38,7 @@ static Queue msgQueue = new LinkedList();
 static final int MSG_QUEUE_MAX = 20;
 static Set listenSessions = null;
 static boolean aiReady = false;
+static Handler reminderHandler = null;
 static String lastAssistantMsg = null;
 static String quotedUin = "";
 static String patOperatorUin = null;
@@ -86,7 +87,18 @@ SQLiteDatabase getDb() {
             ")"
         );
         sharedDb.execSQL("CREATE INDEX IF NOT EXISTS idx_tag_pool_uin ON tag_pool(uin)");
-
+        sharedDb.execSQL(
+            "CREATE TABLE IF NOT EXISTS reminders (" +
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+            "uin TEXT NOT NULL, " +
+            "peer_uin TEXT NOT NULL, " +
+            "chat_type INTEGER NOT NULL, " +
+            "content TEXT NOT NULL, " +
+            "remind_at INTEGER NOT NULL, " +
+            "created_at INTEGER NOT NULL, " +
+            "fired INTEGER NOT NULL DEFAULT 0" +
+            ")"
+        );
     }
     return sharedDb;
 }
@@ -941,6 +953,7 @@ String buildAI2Prompt(String peerUin, int chatType) {
     sb.append("Corax-Shell 工作区 (通过 shell(cmd) 使用):\n");
     sb.append("- 所有操作通过 shell 完成。管道(|) 重定向(>) 后台(&)\n");
     sb.append("- corax-search/corax-fetch 联网，corax-mem-* 记忆管理\n");
+    sb.append("- corax-remind <分钟> <内容> 定时提醒(到点自动发消息)，corax-remind list 查看，rm <id> 取消\n");
     sb.append("- /dev/out 发消息，/dev/msg-stream 订阅消息流\n");
     sb.append("- /proc/sys/ 系统属性，/etc/skills/ 技能，/etc/prompt/ 人设\n");
     sb.append("- /persist/ 持久化脚本，/tmp/ 临时，后台: cmd &\n");
@@ -1790,6 +1803,116 @@ long getAccessedAt(long id) {
     } catch (Exception e) { }
     finally { if (c != null) c.close(); }
     return System.currentTimeMillis();
+}
+
+// ==================== 定时提醒 ====================
+String relativeTimeLeft(long ms) {
+    if (ms < 60000) return "不到1分钟";
+    if (ms < 3600000) return (ms / 60000) + "分钟后";
+    if (ms < 86400000) return (ms / 3600000) + "小时" + ((ms % 3600000) / 60000) + "分钟后";
+    return (ms / 86400000) + "天后";
+}
+
+long storeReminder(String uin, String peerUin, int chatType, String content, long remindAt) {
+    try {
+        ContentValues cv = new ContentValues();
+        cv.put("uin", uin);
+        cv.put("peer_uin", peerUin);
+        cv.put("chat_type", chatType);
+        cv.put("content", content);
+        cv.put("remind_at", remindAt);
+        cv.put("created_at", System.currentTimeMillis());
+        cv.put("fired", 0);
+        long id = getDb().insert("reminders", null, cv);
+        if (id > 0) scheduleReminder(id, remindAt);
+        return id;
+    } catch (Exception e) { log("error.txt", "storeReminder: " + e.getMessage()); return -1; }
+}
+
+void scheduleReminder(long id, long remindAt) {
+    if (reminderHandler == null) reminderHandler = new Handler(Looper.getMainLooper());
+    long delay = remindAt - System.currentTimeMillis();
+    if (delay < 0) delay = 0;
+    reminderHandler.postDelayed(new Runnable() {
+        public void run() { fireReminder(id); }
+    }, delay);
+}
+
+void fireReminder(long id) {
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery(
+            "SELECT uin, peer_uin, chat_type, content FROM reminders WHERE id=? AND fired=0",
+            new String[]{String.valueOf(id)});
+        if (c.moveToFirst()) {
+            String uin = c.getString(0);
+            String peerUin = c.getString(1);
+            int chatType = c.getInt(2);
+            String content = c.getString(3);
+            String prefix = "1".equals(getAiConfig("ai_prefix")) ? "[AI] " : "";
+            sendMsg(peerUin, prefix + "⏰ 提醒 @" + getMemberName(chatType, peerUin, uin) + "：" + content, chatType);
+            ContentValues cv = new ContentValues();
+            cv.put("fired", 1);
+            getDb().update("reminders", cv, "id=?", new String[]{String.valueOf(id)});
+        }
+    } catch (Exception e) { log("error.txt", "fireReminder: " + e.getMessage()); }
+    finally { if (c != null) c.close(); }
+}
+
+void loadPendingReminders() {
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery("SELECT id, remind_at FROM reminders WHERE fired=0", null);
+        while (c.moveToNext()) {
+            scheduleReminder(c.getLong(0), c.getLong(1));
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+}
+
+List getReminders(String uin) {
+    List results = new ArrayList();
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery(
+            "SELECT id, content, remind_at FROM reminders WHERE uin=? AND fired=0 ORDER BY remind_at ASC",
+            new String[]{uin});
+        while (c.moveToNext()) {
+            Map m = new HashMap();
+            m.put("id", c.getLong(0));
+            m.put("content", c.getString(1));
+            m.put("remind_at", c.getLong(2));
+            results.add(m);
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+    return results;
+}
+
+List getAllReminders() {
+    List results = new ArrayList();
+    Cursor c = null;
+    try {
+        c = getDb().rawQuery(
+            "SELECT id, uin, content, remind_at FROM reminders WHERE fired=0 ORDER BY remind_at ASC", null);
+        while (c.moveToNext()) {
+            Map m = new HashMap();
+            m.put("id", c.getLong(0));
+            m.put("uin", c.getString(1));
+            m.put("content", c.getString(2));
+            m.put("remind_at", c.getLong(3));
+            results.add(m);
+        }
+    } catch (Exception e) { }
+    finally { if (c != null) c.close(); }
+    return results;
+}
+
+boolean cancelReminder(long id, String uin) {
+    try {
+        int rows = getDb().delete("reminders", "id=? AND uin=?", new String[]{String.valueOf(id), uin});
+        return rows > 0;
+    } catch (Exception e) { return false; }
 }
 
 String getMemberName(int chatType, String peerUin, String uin) {
@@ -2863,10 +2986,61 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             }
             return "用法: corax-listen <on|off|status>";
         }
+        if (cmd.equals("corax-remind")) {
+            String sub = args.length > 0 ? args[0] : "";
+            if (sub.equals("list")) {
+                List prs = getReminders(senderUin);
+                if (prs.isEmpty()) return "(无待触发提醒)";
+                StringBuilder sb = new StringBuilder();
+                long now = System.currentTimeMillis();
+                for (int i = 0; i < prs.size(); i++) {
+                    Map rm = (Map) prs.get(i);
+                    long rat = Long.parseLong(String.valueOf(rm.get("remind_at")));
+                    sb.append("#").append(rm.get("id")).append(" ").append(rm.get("content"))
+                      .append(" (").append(relativeTimeLeft(rat - now)).append(")\n");
+                }
+                return sb.toString().trim();
+            }
+            if (sub.equals("all")) {
+                String role = getRole(senderUin);
+                if (!role.equals("ADMIN") && !role.equals("OWNER")) return "corax-remind all: 需要管理员权限";
+                List all = getAllReminders();
+                if (all.isEmpty()) return "(全局无待触发提醒)";
+                StringBuilder sb = new StringBuilder();
+                long now = System.currentTimeMillis();
+                for (int i = 0; i < all.size(); i++) {
+                    Map rm = (Map) all.get(i);
+                    long rat = Long.parseLong(String.valueOf(rm.get("remind_at")));
+                    String ru = String.valueOf(rm.get("uin"));
+                    sb.append("#").append(rm.get("id")).append(" [").append(getMemberName(chatType, peerUin, ru)).append("] ")
+                      .append(rm.get("content")).append(" (").append(relativeTimeLeft(rat - now)).append(")\n");
+                }
+                return sb.toString().trim();
+            }
+            if (sub.equals("rm")) {
+                if (args.length < 2) return "用法: corax-remind rm <id>";
+                long rid = Long.parseLong(args[1].replaceAll("[^0-9]", ""));
+                return cancelReminder(rid, senderUin) ? "已取消 #" + rid : "取消失败(不存在或无权限)";
+            }
+            // add: corax-remind add <分钟> <内容>  或  corax-remind <分钟> <内容>
+            int ai = sub.equals("add") ? 1 : 0;
+            if (ai >= args.length) return "用法: corax-remind <分钟> <内容> | list | rm <id> | all";
+            int mins;
+            try { mins = Integer.parseInt(args[ai].replaceAll("[^0-9]", "")); }
+            catch (Exception e) { return "corax-remind: 分钟数无效: " + args[ai]; }
+            if (mins <= 0) return "corax-remind: 分钟数须大于0";
+            StringBuilder cb = new StringBuilder();
+            for (int i = ai + 1; i < args.length; i++) { if (i > ai + 1) cb.append(" "); cb.append(args[i]); }
+            String rc = cb.toString().trim();
+            if (rc.isEmpty()) return "用法: corax-remind <分钟> <内容>";
+            long remindAt = System.currentTimeMillis() + mins * 60 * 1000L;
+            long rid = storeReminder(senderUin, peerUin, chatType, rc, remindAt);
+            return rid > 0 ? "已设置提醒 #" + rid + "：" + mins + "分钟后提醒\"" + rc + "\"" : "设置失败";
+        }
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
+                + "Corax命令: corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-remind\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /usr/share/doc/corax/ 了解项目架构";
@@ -3360,6 +3534,7 @@ public void onMsg(Object msg) {
         getDb();
         loadAiConfig();
         loadSkills();
+        loadPendingReminders();
         aiReady = true;
     }
     
