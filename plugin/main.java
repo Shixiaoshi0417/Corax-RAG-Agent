@@ -2582,9 +2582,9 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         line = line.substring(1, line.length() - 1).trim();
     }
 
-    // 分号分隔的多条命令，顺序执行
-    if (line.contains(";")) {
-        String[] seqs = line.split(";");
+    // 分号/与号分隔的多条命令，顺序执行 (; 或 &&)
+    if (line.contains(";") || line.contains("&&")) {
+        String[] seqs = line.split(";|&&");
         String lastOutput = "";
         for (int si = 0; si < seqs.length; si++) {
             String s = seqs[si].trim();
