@@ -2237,7 +2237,7 @@ String vfsWrite(String path, String content, boolean append, String senderUin, S
         return vfsWritePromptActive(content);
     }
     if (path.startsWith("/etc/")) {
-        return vfsWriteEtc(path, content, append);
+        return vfsWriteEtc(path, content, append, senderUin);
     }
     if (path.equals("/dev/out")) { vfsWriteDevOut(content, peerUin, chatType); return null; }
     if (path.equals("/dev/exit")) { vfsWriteDevExit(content); return null; }
@@ -2256,17 +2256,27 @@ String vfsWrite(String path, String content, boolean append, String senderUin, S
     return "[只读或不存在: " + path + "]";
 }
 
-// 路径规范化
+// 路径规范化 — 解析 . 与 .. 段，防止逃逸根目录（沙箱）
 String vfsNorm(String p) {
     if (p == null) {
         return "/";
     }
     p = p.trim();
-    // 去掉 // /./ /../
-    while (p.contains("//")) p = p.replace("//", "/");
-    while (p.contains("/./")) p = p.replace("/./", "/");
     if (!p.startsWith("/")) p = "/" + p;
-    return p;
+    boolean trailing = p.endsWith("/") && p.length() > 1;
+    String[] segs = p.split("/");
+    List out = new ArrayList();
+    for (int i = 0; i < segs.length; i++) {
+        String s = segs[i];
+        if (s.isEmpty() || s.equals(".")) continue;
+        if (s.equals("..")) { if (!out.isEmpty()) out.remove(out.size() - 1); continue; }
+        out.add(s);
+    }
+    if (out.isEmpty()) return "/";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < out.size(); i++) sb.append("/").append(out.get(i));
+    if (trailing) sb.append("/");
+    return sb.toString();
 }
 
 // ======= /proc/sys/ =======
@@ -2372,7 +2382,15 @@ String vfsReadEtc(String path) {
     }
     return readFileString(real);
 }
-String vfsWriteEtc(String path, String content, boolean append) {
+String vfsWriteEtc(String path, String content, boolean append, String senderUin) {
+    String file = path.substring(5); // strip "/etc/"
+    String role = getRole(senderUin);
+    // 权限敏感名单：admins/default_account 需 OWNER，其余名单需 ADMIN+
+    if (file.equals("admins.txt") || file.equals("default_account.txt")) {
+        if (!role.equals("OWNER")) return "[拒绝: 写入 " + file + " 需要 OWNER 权限]";
+    } else if (file.equals("blocked.txt") || file.equals("members.txt") || file.equals("enabled_conversations.txt") || file.equals("listen_sessions.txt")) {
+        if (!role.equals("OWNER") && !role.equals("ADMIN")) return "[拒绝: 写入 " + file + " 需要管理员权限]";
+    }
     String real = vfsMapEtcPath(path);
     return writeFileString(real, content, append);
 }
@@ -2514,10 +2532,16 @@ String vfsWriteProcKill(String path) {
 
 // ======= /var/ =======
 String vfsWriteVarDb(String sql) {
-    // 白名单 SQL
-    String upper = sql.trim().toUpperCase();
-    if (upper.contains("DROP") || upper.contains("ALTER") || upper.contains("ATTACH") || upper.contains("VACUUM")) {
-        return "[拒绝: 不允许 DROP/ALTER/ATTACH/VACUUM]";
+    String body = sql.trim();
+    if (body.endsWith(";")) body = body.substring(0, body.length() - 1).trim();
+    // 阻止多语句堆叠（防注入）
+    if (body.contains(";")) return "[拒绝: 不允许多条语句]";
+    if (body.isEmpty()) return "[拒绝: 空语句]";
+    // 按首关键字判定，避免对字符串字面量中的 DROP 等子串误杀
+    String first = body.split("\\s+")[0].toUpperCase();
+    if (first.equals("DROP") || first.equals("ALTER") || first.equals("ATTACH") || first.equals("DETACH")
+        || first.equals("VACUUM") || first.equals("PRAGMA") || first.equals("REINDEX")) {
+        return "[拒绝: 不允许 " + first + "]";
     }
     try { getDb().execSQL(sql); return null; }
     catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
@@ -2575,9 +2599,15 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
     if (line == null || line.trim().isEmpty()) return "";
     line = line.trim();
 
-    // 子Shell: ( ... )
+    // 子Shell: ( ... ) — 仅当整行被一对括号包裹时才剥离，避免 (a)|(b) 被误剥
     if (line.startsWith("(") && line.endsWith(")")) {
-        line = line.substring(1, line.length() - 1).trim();
+        int depth = 0; boolean wraps = true;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '(') depth++;
+            else if (ch == ')') { depth--; if (depth == 0 && i < line.length() - 1) { wraps = false; break; } }
+        }
+        if (wraps) line = line.substring(1, line.length() - 1).trim();
     }
 
     // ---- Tokenizer ----
@@ -2589,9 +2619,9 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         if (c == ' ' || c == '\t') { pos++; continue; }
         // 注释
         if (c == '#') break;
-        // 后台
-        if (c == '&' && pos == line.length() - 1) { tokens.add("&"); break; }
+        // AND / 后台（单个 & 始终单独成词并推进 pos，避免中间 & 造成死循环）
         if (c == '&' && pos + 1 < line.length() && line.charAt(pos + 1) == '&') { tokens.add("&&"); pos += 2; continue; }
+        if (c == '&') { tokens.add("&"); pos++; continue; }
         // OR
         if (c == '|' && pos + 1 < line.length() && line.charAt(pos + 1) == '|') { tokens.add("||"); pos += 2; continue; }
         // 管道
@@ -2602,19 +2632,28 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         if (c == '>' && pos + 1 < line.length() && line.charAt(pos + 1) == '>') { tokens.add(">>"); pos += 2; continue; }
         if (c == '>') { tokens.add(">"); pos++; continue; }
         if (c == '<') { tokens.add("<"); pos++; continue; }
-        // 引号字符串
+        // 引号字符串（双引号支持 \ 转义，单引号原样）
         if (c == '"' || c == '\'') {
             char quote = c;
-            int startQ = ++pos;
-            while (pos < line.length() && line.charAt(pos) != quote) pos++;
-            tokens.add(line.substring(startQ, pos));
+            pos++;
+            StringBuilder qb = new StringBuilder();
+            while (pos < line.length() && line.charAt(pos) != quote) {
+                char qc = line.charAt(pos);
+                if (qc == '\\' && quote == '"' && pos + 1 < line.length()) { qb.append(line.charAt(pos + 1)); pos += 2; continue; }
+                qb.append(qc); pos++;
+            }
+            tokens.add(qb.toString());
             if (pos < line.length()) pos++; // skip closing quote
             continue;
         }
-        // 普通单词
-        int startW = pos;
-        while (pos < line.length() && " |;&><\t".indexOf(line.charAt(pos)) < 0) pos++;
-        tokens.add(line.substring(startW, pos));
+        // 普通单词（支持 \ 转义）
+        StringBuilder wb = new StringBuilder();
+        while (pos < line.length() && " |;&><\t".indexOf(line.charAt(pos)) < 0) {
+            char wc = line.charAt(pos);
+            if (wc == '\\' && pos + 1 < line.length()) { wb.append(line.charAt(pos + 1)); pos += 2; continue; }
+            wb.append(wc); pos++;
+        }
+        tokens.add(wb.toString());
     }
     if (tokens.isEmpty()) return "";
 
@@ -2622,17 +2661,13 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
     boolean bg = tokens.size() > 0 && tokens.get(tokens.size() - 1).equals("&");
     if (bg) tokens.remove(tokens.size() - 1);
 
-    // ---- 递归下降解析器 ----
-    // 解析入口
-    int[] idx = new int[]{0};
-    String result = parseSequence(tokens, idx, "", senderUin, peerUin, chatType);
-
-    // 后台执行
+    // ---- 后台执行：仅在后台线程跑，不在前台同步执行 ----
     if (bg) {
         final List finalTokens = new ArrayList(tokens);
         final String su = senderUin, pu = peerUin;
         final int ct = chatType;
-        final int p = nextDaemonPid++;
+        final int p;
+        synchronized (daemons) { p = nextDaemonPid++; }
         Thread t = new Thread(new Runnable() {
             public void run() {
                 try {
@@ -2652,24 +2687,47 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         return "[pid:" + p + "]";
     }
 
+    // ---- 前台执行 ----
+    int[] idx = new int[]{0};
+    String result = parseSequence(tokens, idx, "", senderUin, peerUin, chatType);
     return result != null ? result : "";
 }
 
-// 解析序列: pipeline ((; | && | ||) pipeline)*
+// 命令是否成功：null/空/以错误标记[开头/command not found 视为失败
+boolean shellOk(String result) {
+    if (result == null) return false;
+    String r = result.trim();
+    if (r.isEmpty()) return true; // 成功但无输出
+    if (r.startsWith("[")) return false; // 错误信息约定以 [ 开头
+    if (r.contains(": command not found")) return false;
+    return true;
+}
+
+// 解析序列: pipeline ((; | & | && | ||) pipeline)*
 String parseSequence(List tokens, int[] idx, String stdin, String senderUin, String peerUin, int chatType) {
-    String result = parsePipeline(tokens, idx, stdin, senderUin, peerUin, chatType);
+    String result = parsePipeline(tokens, idx, stdin, senderUin, peerUin, chatType, true);
     while (idx[0] < tokens.size()) {
         String op = (String) tokens.get(idx[0]);
-        if (op.equals(";")) { idx[0]++; result = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); }
-        else if (op.equals("&&")) { idx[0]++; result = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); }
-        else if (op.equals("||")) { idx[0]++; String r = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType); if (result == null || result.isEmpty()) result = r; }
+        if (op.equals(";") || op.equals("&")) { idx[0]++; result = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType, true); }
+        else if (op.equals("&&")) {
+            idx[0]++;
+            boolean ok = shellOk(result);
+            String r = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType, ok);
+            if (ok) result = r;
+        }
+        else if (op.equals("||")) {
+            idx[0]++;
+            boolean fail = !shellOk(result);
+            String r = parsePipeline(tokens, idx, "", senderUin, peerUin, chatType, fail);
+            if (fail) result = r;
+        }
         else break;
     }
     return result;
 }
 
-// 解析管道: command (| command)*
-String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, String peerUin, int chatType) {
+// 解析管道: command (| command)*  — exec=false 时仅消费 token 不执行(用于 && || 短路跳过)
+String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, String peerUin, int chatType, boolean exec) {
     String pipeIn = stdin;
     while (idx[0] < tokens.size()) {
         // 收集命令词和重定向
@@ -2677,7 +2735,7 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
         String outRedir = null; boolean outAppend = false; String inRedir = null;
         while (idx[0] < tokens.size()) {
             String t = (String) tokens.get(idx[0]);
-            if (t.equals("|") || t.equals(";") || t.equals("&&") || t.equals("||")) break;
+            if (t.equals("|") || t.equals(";") || t.equals("&") || t.equals("&&") || t.equals("||")) break;
             if (t.equals(">")) { idx[0]++; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
             if (t.equals(">>")) { idx[0]++; outAppend = true; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
             if (t.equals("<")) { idx[0]++; if (idx[0] < tokens.size()) inRedir = (String) tokens.get(idx[0]++); continue; }
@@ -2686,6 +2744,12 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
         }
 
         if (cmdArgs.isEmpty()) break;
+
+        // 短路跳过：不执行，仅继续消费后续管道段
+        if (!exec) {
+            if (idx[0] < tokens.size() && tokens.get(idx[0]).equals("|")) { idx[0]++; continue; }
+            break;
+        }
 
         // 输入重定向
         if (inRedir != null) pipeIn = vfsRead(inRedir, senderUin, peerUin, chatType);
@@ -2698,8 +2762,8 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
         String result = shellBuiltin(cmd, args, pipeIn != null ? pipeIn : "", senderUin, peerUin, chatType);
         pipeIn = (result != null) ? result : "";
 
-        // 输出重定向
-        if (outRedir != null && !pipeIn.isEmpty()) {
+        // 输出重定向（允许空内容写入以支持清空/截断文件）
+        if (outRedir != null) {
             vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
             pipeIn = "";
         }
