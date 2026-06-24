@@ -34,6 +34,8 @@ static long wakeWordsFileMtime = 0;
 
 static String cachedSkills = null;
 static boolean aiProcessing = false;
+static Queue msgQueue = new LinkedList();
+static final int MSG_QUEUE_MAX = 20;
 static Set listenSessions = null;
 static boolean aiReady = false;
 static String lastAssistantMsg = null;
@@ -2031,6 +2033,569 @@ String fetchWebContentSimple(String urlStr, int maxLen) {
     } catch (Exception e) { return "[抓取异常]"; }
     finally { if (conn != null) conn.disconnect(); }
 }
+
+// ==================== Corax-Shell VFS ====================
+// 虚拟文件系统核心 — 路径式能力暴露
+
+// VFS 读入口
+String vfsRead(String path, String senderUin, String peerUin, int chatType) {
+    path = vfsNorm(path);
+    // /proc/sys/ — 系统属性
+    if (path.startsWith("/proc/sys/")) return vfsReadProcSys(path);
+    // /proc/self/ — 当前会话
+    if (path.startsWith("/proc/self/")) return vfsReadProcSelf(path, senderUin, chatType, peerUin);
+    // /proc/ps,free,uptime — 系统状态
+    if (path.startsWith("/proc/ps")) return vfsReadProcPS();
+    if (path.equals("/proc/free")) return vfsReadProcFree();
+    if (path.equals("/proc/uptime")) return vfsReadProcUptime();
+    if (path.startsWith("/proc/") && path.contains("/status")) return vfsReadProcStatus(path);
+    if (path.startsWith("/proc/") && path.contains("/stdout")) return vfsReadProcStdout(path);
+    // /proc/prompt/
+    if (path.startsWith("/proc/prompt/")) return vfsReadProcPrompt(path);
+    // /etc/
+    if (path.startsWith("/etc/")) return vfsReadEtc(path);
+    // /ctx/
+    if (path.startsWith("/ctx/")) return vfsReadCtx(path);
+    // /var/
+    if (path.equals("/var/data.db")) return "[SQLite: /var/data.db — 使用 sqlite3 查询]";
+    if (path.startsWith("/var/log/")) return vfsReadVarLog(path);
+    // /dev/
+    if (path.startsWith("/dev/")) return vfsReadDev(path, peerUin, chatType);
+    // /persist/
+    if (path.startsWith("/persist/")) return vfsReadPersist(path);
+    // /src/
+    if (path.equals("/src/main.java")) return vfsReadSrc();
+    // /tmp/
+    if (path.startsWith("/tmp/")) return vfsReadTmp(path);
+    // directories
+    if (path.equals("/bin/")) return "corax-mem-create  corax-mem-overwrite  corax-mem-rm  corax-mem-tag  corax-mem-search  corax-search  corax-fetch  corax-skill  corax-listen  corax-help";
+    if (path.equals("/")) return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
+    if (path.equals("/proc/")) return "sys/  self/  prompt/  ps  free  uptime";
+    if (path.equals("/etc/")) return "admins.txt  blocked.txt  members.txt  enabled_conversations.txt  listen_sessions.txt  default_account.txt  prompt/  skills/";
+    return "[路径不存在: " + path + "]";
+}
+
+// VFS 写入口 — 返回 null 成功, 否则返回错误信息
+String vfsWrite(String path, String content, boolean append, String senderUin, String peerUin, int chatType) {
+    path = vfsNorm(path);
+    if (path.startsWith("/proc/sys/")) return vfsWriteProcSys(path, content);
+    if (path.startsWith("/proc/prompt/active")) return vfsWritePromptActive(content);
+    if (path.startsWith("/etc/")) return vfsWriteEtc(path, content, append);
+    if (path.equals("/dev/out")) { vfsWriteDevOut(content, peerUin, chatType); return null; }
+    if (path.equals("/dev/exit")) { vfsWriteDevExit(content); return null; }
+    if (path.startsWith("/persist/")) return vfsWritePersist(path, content, append);
+    if (path.startsWith("/tmp/")) return vfsWriteTmp(path, content, append);
+    if (path.startsWith("/proc/") && path.contains("/kill")) return vfsWriteProcKill(path);
+    if (path.startsWith("/var/data.db")) return vfsWriteVarDb(content);
+    return "[只读或不存在: " + path + "]";
+}
+
+// 路径规范化
+String vfsNorm(String p) {
+    if (p == null) return "/";
+    p = p.trim();
+    // 去掉 // /./ /../
+    while (p.contains("//")) p = p.replace("//", "/");
+    while (p.contains("/./")) p = p.replace("/./", "/");
+    if (!p.startsWith("/")) p = "/" + p;
+    return p;
+}
+
+// ======= /proc/sys/ =======
+String vfsReadProcSys(String path) {
+    Map cfg = loadAiConfig();
+    String key = path.replace("/proc/sys/", "");
+    if (key.equals("api_key") || key.equals("search_api_key")) {
+        String v = (String) cfg.get(key);
+        if (v == null || v.isEmpty()) return "(未设置)";
+        if (v.length() > 8) v = v.substring(0, 4) + "****" + v.substring(v.length() - 4);
+        return v;
+    }
+    String v = getAiConfig(key);
+    return v.isEmpty() ? "(未设置)" : v;
+}
+String vfsWriteProcSys(String path, String content) {
+    String key = path.replace("/proc/sys/", "");
+    if (key.equals("api_key") || key.equals("search_api_key")) return "[拒绝: api_key/search_api_key 不可覆写]";
+    String[] vk = {"model","ai_url","context_ttl","max_turns","search_provider","show_stats","debug","ai_prefix","search_rounds","temperature","pat_wake","sewarden"};
+    boolean valid = false; for (int i = 0; i < vk.length; i++) if (vk[i].equals(key)) { valid = true; break; }
+    if (!valid) return "[无效配置键: " + key + "]";
+    Map cfg = loadAiConfig(); cfg.put(key, content.trim()); saveAiConfig(cfg);
+    return null;
+}
+
+// ======= /proc/self/ =======
+String vfsReadProcSelf(String path, String senderUin, int chatType, String peerUin) {
+    if (path.equals("/proc/self/role")) return getRole(senderUin);
+    if (path.equals("/proc/self/memory_count")) return String.valueOf(getMemoryCount(senderUin));
+    if (path.equals("/proc/self/chat")) return peerUin + "_" + chatType;
+    if (path.equals("/proc/self/listening")) {
+        if (listenSessions == null) listenSessions = readStringSet(pluginPath + "/config/listen_sessions.txt");
+        return listenSessions.contains(peerUin + "_" + chatType) ? "yes" : "no";
+    }
+    return "[未知: " + path + "]";
+}
+
+// ======= /proc/prompt/ =======
+String vfsReadProcPrompt(String path) {
+    if (path.equals("/proc/prompt/active")) return getActivePersona();
+    if (path.equals("/proc/prompt/slots")) {
+        List personas = listPersonas();
+        StringBuilder sb = new StringBuilder();
+        String cur = getActivePersona();
+        for (int i = 0; i < personas.size(); i++) {
+            String p = (String) personas.get(i);
+            sb.append(p);
+            if (p.equals(cur)) sb.append(" [active]");
+            sb.append("\n");
+        }
+        return sb.toString().trim();
+    }
+    return "[未知: " + path + "]";
+}
+String vfsWritePromptActive(String content) {
+    String target = content.trim();
+    List personas = listPersonas();
+    boolean found = false;
+    for (int i = 0; i < personas.size(); i++) { if (personas.get(i).equals(target)) { found = true; break; } }
+    if (!found) return "[人设不存在: " + target + "]";
+    if (target.equals(getActivePersona())) return null; // 已是当前，无需切换
+    setActivePersona(target);
+    return null;
+}
+
+// ======= /etc/ =======
+String vfsMapEtcPath(String path) {
+    String file = path.substring(5); // strip "/etc/"
+    if (file.startsWith("prompt/")) return pluginPath + "/config/" + file;
+    if (file.startsWith("skills/")) return pluginPath + "/config/" + file;
+    return pluginPath + "/config/" + file;
+}
+String vfsReadEtc(String path) {
+    String real = vfsMapEtcPath(path);
+    if (new File(real).isDirectory()) {
+        String[] files = new File(real).list();
+        if (files == null) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+        return sb.toString().trim();
+    }
+    return readFileString(real);
+}
+String vfsWriteEtc(String path, String content, boolean append) {
+    String real = vfsMapEtcPath(path);
+    return writeFileString(real, content, append);
+}
+
+// ======= /ctx/ =======
+String vfsReadCtx(String path) {
+    if (path.equals("/ctx/")) {
+        File dir = new File(pluginPath + "/config/ctx");
+        String[] files = dir.list();
+        if (files == null || files.length == 0) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+        return sb.toString().trim();
+    }
+    String real = pluginPath + "/config/ctx/" + path.replace("/ctx/", "");
+    return readFileString(real);
+}
+
+// ======= /var/log/ =======
+String vfsReadVarLog(String path) {
+    if (path.equals("/var/log/messages")) return readFileString(pluginPath + "/config/log.txt");
+    if (path.equals("/var/log/errors")) return readFileString(pluginPath + "/config/error.txt");
+    return "[未知日志: " + path + "]";
+}
+
+// ======= /dev/ =======
+// 消息总线 — 只读 FD，由 onMsg 注入
+static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
+String vfsReadDev(String path, String peerUin, int chatType) {
+    if (path.equals("/dev/msg-stream")) {
+        if (msgBus.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < msgBus.size(); i++) sb.append(msgBus.get(i)).append("\n");
+        msgBus.clear();
+        return sb.toString().trim();
+    }
+    return "[只写设备或不存在]";
+}
+void vfsWriteDevOut(String content, String peerUin, int chatType) {
+    String prefix = "1".equals(getAiConfig("ai_prefix")) ? "[AI] " : "";
+    sendMsg(peerUin, prefix + content, chatType);
+}
+void vfsWriteDevExit(String content) {
+    // daemon 退出信号，由 shell exec 的 & 分支处理
+}
+
+// ======= /persist/ /tmp/ (共享存储) =======
+static Map vfsTmp = new HashMap(); // 内存虚拟 /tmp
+String vfsReadPersist(String path) {
+    return readFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""));
+}
+String vfsWritePersist(String path, String content, boolean append) {
+    return writeFileString(pluginPath + "/config/shared-space/" + path.replace("/persist/", ""), content, append);
+}
+String vfsReadTmp(String path) {
+    Object v = vfsTmp.get(path);
+    return v != null ? v.toString() : "(文件不存在)";
+}
+String vfsWriteTmp(String path, String content, boolean append) {
+    if (vfsTmp.size() > 50) return "[tmp 文件数超限 50]";
+    String existing = (String) vfsTmp.get(path);
+    if (existing != null && existing.length() + content.length() > 100000) return "[tmp 单文件超限 100KB]";
+    if (append && existing != null) content = existing + content;
+    vfsTmp.put(path, content);
+    return null;
+}
+
+// ======= /src/ /proc/ps/free/uptime =======
+String vfsReadSrc() { return readFileString(pluginPath + "/main.java"); }
+static long wsStartTime = System.currentTimeMillis();
+String vfsReadProcPS() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("PID  STAT  CMD\n");
+    for (Object e : daemons.entrySet()) {
+        Map.Entry en = (Map.Entry) e;
+        Thread t = (Thread) en.getValue();
+        String stat = t.isAlive() ? "S" : "Z";
+        sb.append(en.getKey()).append("    ").append(stat).append("    corax-daemon\n");
+    }
+    if (daemons.isEmpty()) sb.append("(无活跃任务)\n");
+    return sb.toString();
+}
+String vfsReadProcFree() {
+    return "daemons: " + daemons.size() + " / 10";
+}
+String vfsReadProcUptime() {
+    long uptime = (System.currentTimeMillis() - wsStartTime) / 1000;
+    return uptime + "s (" + (uptime / 3600) + "h " + ((uptime % 3600) / 60) + "m)";
+}
+String vfsReadProcStatus(String path) {
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/status", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        Thread t = (Thread) daemons.get(pid);
+        if (t == null) return "[pid 不存在]";
+        return t.isAlive() ? "running" : "terminated";
+    } catch (Exception e) { return "[解析失败]"; }
+}
+String vfsReadProcStdout(String path) {
+    // daemon stdout 从队列读
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/stdout", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        List q = (List) daemonOutputs.get(pid);
+        if (q == null || q.isEmpty()) return "(空)";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < q.size(); i++) sb.append(q.get(i)).append("\n");
+        q.clear();
+        return sb.toString().trim();
+    } catch (Exception e) { return "[解析失败]"; }
+}
+String vfsWriteProcKill(String path) {
+    try {
+        String pidStr = path.replace("/proc/", "").replace("/kill", "").trim();
+        int pid = Integer.parseInt(pidStr);
+        Thread t = (Thread) daemons.get(pid);
+        if (t != null && t.isAlive()) t.interrupt();
+        daemons.remove(pid);
+        daemonOutputs.remove(pid);
+        return null;
+    } catch (Exception e) { return "[解析失败]"; }
+}
+
+// ======= /var/ =======
+String vfsWriteVarDb(String sql) {
+    // 白名单 SQL
+    String upper = sql.trim().toUpperCase();
+    if (upper.contains("DROP") || upper.contains("ALTER") || upper.contains("ATTACH") || upper.contains("VACUUM")) {
+        return "[拒绝: 不允许 DROP/ALTER/ATTACH/VACUUM]";
+    }
+    try { getDb().execSQL(sql); return null; }
+    catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
+}
+
+// ======= 辅助 =======
+String readFileString(String path) {
+    try {
+        File f = new File(path);
+        if (!f.exists()) return "(文件不存在)";
+        if (f.isDirectory()) {
+            String[] files = f.list();
+            if (files == null || files.length == 0) return "(空)";
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < files.length; i++) sb.append(files[i]).append("\n");
+            return sb.toString().trim();
+        }
+        BufferedReader br = new BufferedReader(new FileReader(f));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = br.readLine()) != null) sb.append(line).append("\n");
+        br.close();
+        return sb.toString().trim();
+    } catch (Exception e) { return "[读取失败: " + e.getMessage() + "]"; }
+}
+String writeFileString(String path, String content, boolean append) {
+    try {
+        File f = new File(path);
+        File parent = f.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        if (append && f.exists()) {
+            FileWriter fw = new FileWriter(f, true);
+            fw.write(content);
+            fw.close();
+        } else {
+            PrintWriter pw = new PrintWriter(new FileWriter(f));
+            pw.print(content);
+            pw.close();
+        }
+        return null;
+    } catch (Exception e) { return "[写入失败: " + e.getMessage() + "]"; }
+}
+
+// ==================== Corax-Shell 执行器 ====================
+static Map daemons = new HashMap();
+static Map daemonOutputs = new HashMap();
+static int nextDaemonPid = 1;
+
+// 单行命令解析与执行
+String shellExecLine(String line, String senderUin, String peerUin, int chatType) {
+    if (line == null || line.trim().isEmpty()) return "";
+    line = line.trim();
+
+    // 后台执行 &
+    boolean bg = line.endsWith("&");
+    if (bg) line = line.substring(0, line.length() - 1).trim();
+
+    // 重定向检测
+    String outRedir = null;
+    boolean outAppend = false;
+    int gtIdx = line.indexOf(">");
+    if (gtIdx > 0) {
+        if (line.charAt(gtIdx + 1) == '>') {
+            outAppend = true;
+            outRedir = line.substring(gtIdx + 2).trim();
+        } else {
+            outRedir = line.substring(gtIdx + 1).trim();
+        }
+        line = line.substring(0, gtIdx).trim();
+    }
+
+    // 管道
+    String[] cmds = line.split("\\|");
+    String pipeIn = "";
+
+    for (int ci = 0; ci < cmds.length; ci++) {
+        String[] parts = cmds[ci].trim().split("\\s+");
+        if (parts.length == 0 || parts[0].isEmpty()) continue;
+        String cmd = parts[0];
+        String[] args = new String[parts.length - 1];
+        for (int ai = 1; ai < parts.length; ai++) args[ai - 1] = parts[ai];
+
+        String result = shellBuiltin(cmd, args, pipeIn, senderUin, peerUin, chatType);
+        pipeIn = (result != null) ? result : "";
+    }
+
+    // 重定向写入
+    if (outRedir != null && !pipeIn.isEmpty()) {
+        vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
+    }
+
+    // 后台
+    if (bg) {
+        final String finalLine = line;
+        final String su = senderUin, pu = peerUin;
+        final int ct = chatType;
+        final int p = nextDaemonPid++;
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                try { shellExecLine(finalLine, su, pu, ct); }
+                catch (Exception e) {
+                    List q = (List) daemonOutputs.get(p);
+                    if (q == null) { q = java.util.Collections.synchronizedList(new ArrayList()); daemonOutputs.put(p, q); }
+                    q.add("stderr: " + e.getMessage());
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        daemons.put(p, t);
+        return "[pid:" + p + "]";
+    }
+
+    return outRedir != null ? "" : pipeIn;
+}
+
+// 内置命令
+String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, String peerUin, int chatType) {
+    try {
+        if (cmd.equals("echo")) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < args.length; i++) { if (i > 0) sb.append(" "); sb.append(args[i]); }
+            return sb.toString();
+        }
+        if (cmd.equals("cat")) {
+            if (args.length == 0) return stdin;
+            String path = args[0];
+            if (path.startsWith("-")) path = args.length > 1 ? args[1] : args[0];
+            if (path.equals("-")) return stdin;
+            return vfsRead(path, senderUin, peerUin, chatType);
+        }
+        if (cmd.equals("ls")) {
+            String path = args.length > 0 ? args[0] : "/";
+            return vfsRead(path, senderUin, peerUin, chatType);
+        }
+        if (cmd.equals("grep")) {
+            boolean invert = false;
+            String pattern = null;
+            for (int i = 0; i < args.length; i++) {
+                if (args[i].equals("-v")) invert = true;
+                else if (pattern == null) pattern = args[i];
+            }
+            if (pattern == null) return "grep: 需要模式";
+            String[] lines = stdin.split("\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                boolean match = lines[i].contains(pattern);
+                if (invert) match = !match;
+                if (match) sb.append(lines[i]).append("\n");
+            }
+            return sb.toString().trim();
+        }
+        if (cmd.equals("wc")) {
+            boolean linesOnly = args.length > 0 && args[0].equals("-l");
+            String[] lines = stdin.split("\n");
+            int count = stdin.isEmpty() ? 0 : lines.length;
+            return linesOnly ? String.valueOf(count) : count + " " + stdin.length();
+        }
+        if (cmd.equals("head")) {
+            int n = 10;
+            if (args.length > 0 && args[0].equals("-n") && args.length > 1) { try { n = Integer.parseInt(args[1]); } catch (Exception e) {} }
+            String[] lines = stdin.split("\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < Math.min(n, lines.length); i++) sb.append(lines[i]).append("\n");
+            return sb.toString().trim();
+        }
+        if (cmd.equals("tail")) {
+            int n = 10;
+            if (args.length > 0 && args[0].equals("-n") && args.length > 1) { try { n = Integer.parseInt(args[1]); } catch (Exception e) {} }
+            String[] lines = stdin.split("\n");
+            int start = Math.max(0, lines.length - n);
+            StringBuilder sb = new StringBuilder();
+            for (int i = start; i < lines.length; i++) sb.append(lines[i]).append("\n");
+            return sb.toString().trim();
+        }
+        if (cmd.equals("date")) {
+            return getCurrentTime();
+        }
+        if (cmd.equals("sleep")) {
+            if (args.length > 0) {
+                try { Thread.sleep(Long.parseLong(args[0]) * 1000L); } catch (Exception e) {}
+            }
+            return "";
+        }
+
+        // Corax 命令
+        if (cmd.equals("corax-search")) {
+            return doWebSearch(args.length > 0 ? args[0] : "");
+        }
+        if (cmd.equals("corax-fetch")) {
+            return doFetchPage(args.length > 0 ? args[0] : "");
+        }
+        if (cmd.equals("corax-mem-create")) {
+            boolean pub = false; String tags = "", content = "";
+            int ai = 0;
+            if (ai < args.length && args[ai].equals("--public")) { pub = true; ai++; }
+            if (ai < args.length) tags = args[ai++];
+            StringBuilder sb = new StringBuilder();
+            for (int i = ai; i < args.length; i++) { if (i > ai) sb.append(" "); sb.append(args[i]); }
+            content = sb.toString();
+            if (tags.isEmpty() || content.isEmpty()) return "用法: corax-mem-create [--public] <tags> <content>";
+            boolean ok = storeMemory(senderUin, content, tags, pub ? "public" : "private", pub ? senderUin : senderUin);
+            return ok ? "已创建" : "创建失败";
+        }
+        if (cmd.equals("corax-mem-rm")) {
+            if (args.length < 1) return "用法: corax-mem-rm <id>";
+            long id = Long.parseLong(args[0]);
+            boolean ok = deleteMemoryById(id, senderUin, getRole(senderUin));
+            return ok ? "已删除 #" + id : "删除失败";
+        }
+        if (cmd.equals("corax-mem-tag")) {
+            boolean pub = args.length > 0 && args[0].equals("--public");
+            String tag = pub ? (args.length > 1 ? args[1] : "") : (args.length > 0 ? args[0] : "");
+            if (tag.isEmpty()) return "用法: corax-mem-tag [--public] <tag>";
+            List results = pub ? searchPublicMemoriesByTag(tag) : searchMemoriesByTag(senderUin, tag);
+            return formatMemList(results, false);
+        }
+        if (cmd.equals("corax-mem-search")) {
+            boolean pub = args.length > 0 && args[0].equals("--public");
+            String kw = pub ? (args.length > 1 ? args[1] : "") : (args.length > 0 ? args[0] : "");
+            if (kw.isEmpty()) return "用法: corax-mem-search [--public] <keyword>";
+            List results = pub ? searchPublicMemories(kw) : searchMemories(senderUin, kw);
+            return formatMemList(results, false);
+        }
+        if (cmd.equals("corax-skill")) {
+            if (args.length < 1) return "用法: corax-skill <skill名称>";
+            return loadSkillContent(args[0]);
+        }
+        if (cmd.equals("corax-listen")) {
+            if (args.length < 1) return "用法: corax-listen <on|off|status>";
+            if (args[0].equals("on")) {
+                addToList(pluginPath + "/config/listen_sessions.txt", peerUin + "_" + chatType);
+                if (listenSessions != null) listenSessions.add(peerUin + "_" + chatType);
+                return "监听已开启";
+            }
+            if (args[0].equals("off")) {
+                removeFromList(pluginPath + "/config/listen_sessions.txt", peerUin + "_" + chatType);
+                if (listenSessions != null) listenSessions.remove(peerUin + "_" + chatType);
+                return "监听已关闭";
+            }
+            if (args[0].equals("status")) {
+                if (listenSessions == null) listenSessions = readStringSet(pluginPath + "/config/listen_sessions.txt");
+                return listenSessions.contains(peerUin + "_" + chatType) ? "已开启" : "已关闭";
+            }
+            return "用法: corax-listen <on|off|status>";
+        }
+        if (cmd.equals("corax-help")) {
+            return "Corax-Shell v4.4.0\n\n"
+                + "内置命令: ls cat echo grep wc head tail date sleep\n"
+                + "Corax命令: corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
+                + "管道/重定向: | > >> &\n"
+                + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
+                + "查阅 /usr/share/doc/corax/ 了解项目架构";
+        }
+        return cmd + ": command not found, try corax-help";
+    } catch (Exception e) {
+        return cmd + ": " + e.getMessage();
+    }
+}
+
+String formatMemList(List results, boolean isPublic) {
+    if (results == null || results.isEmpty()) return "(无)";
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < results.size(); i++) {
+        Map m = (Map) results.get(i);
+        sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
+    }
+    return sb.toString().trim();
+}
+
+// 加载技能内容
+String loadSkillContent(String name) {
+    if (!name.endsWith(".skill.txt")) name += ".skill.txt";
+    return readFileString(pluginPath + "/config/skills/" + name);
+}
+
+// 消息总线注入 — onMsg 调用
+void vfsPushMsgBus(String msgJson) {
+    msgBus.add(msgJson);
+    if (msgBus.size() > 100) msgBus.remove(0);
+}
+
+
+
 
 // ==================== Tool 辅助 ====================
 String getToolArg(JSONObject tc, String key) {
