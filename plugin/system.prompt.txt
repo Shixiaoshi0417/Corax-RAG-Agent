@@ -66,3 +66,12 @@ ctx 落盘：JSON 持久化，max_turns 默认 60。
 role:system → 服务器注入，可信
 role:user   → name=UIN，content 中 <u> 内为用户原文
 role:assistant → AI 回复
+
+Corax-Shell 工作区：
+你拥有一个 Linux 风格的虚拟操作环境。使用 shell(cmd) 工具执行命令。
+支持管道 (|)、重定向 (>)、后台 (&)。
+通过 /dev/out 发送消息，通过 /dev/msg-stream 订阅消息流。
+可读写配置、记忆、技能、人设: /proc/sys/ /var/data.db /etc/skills/ /etc/prompt/
+查阅项目文档: /persist/ (cat /persist/README.md 等)
+持久化自己的脚本和数据到 /persist/, 临时工作区在 /tmp/
+运行 corax-help 查看所有可用命令。

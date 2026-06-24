@@ -1,19 +1,5 @@
 # Changelog
-## v4.4.0 — Workspace
-### Features
-- **Corax-Shell**: 虚拟文件系统 + 单一 shell(cmd) 工具替代全部 FC 工具
-- 支持管道(|)、重定向(>)、后台(&)，提供 ls/cat/echo/grep/wc/head/tail/date/sleep 等内置命令
-- /proc/sys/ 系统属性读写，/etc/ 名单/配置管理，/dev/msg-stream 消息总线，/dev/out 消息输出
-- /persist/ 持久化存储，/tmp/ 临时工作区，daemon 后台任务
-- corax-mem-* 记忆管理，corax-search/corax-fetch 联网，corax-listen 监听控制
-- /proc/prompt/ 人设槽位（A/B 分区，激活槽只读）
-
-### Bug Fixes
-- 修复 BeanShell 把 log() 误判为变量声明导致静默崩溃
-- 消息队列：AI 处理中收到的消息不再丢弃，FIFO 缓存最多 20 条
-
-### Removed
-- 移除定时提醒系统（由 shell daemon 替代）
+## v4.3.2
 ### Features
 - Add set_reminder / cancel_reminder / list_reminders tools: AI can set timed reminders, cancel them, and query pending reminders with remaining time (thanks @Shixiaoshi0417)
 - Handler.postDelayed precise scheduling for reminders, independent of message events
