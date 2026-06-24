@@ -2577,6 +2577,23 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
     }
     line = line.trim();
 
+    // 子Shell支持: (cmd1; cmd2) 语法
+    if (line.startsWith("(") && line.endsWith(")")) {
+        line = line.substring(1, line.length() - 1).trim();
+    }
+
+    // 分号分隔的多条命令，顺序执行
+    if (line.contains(";")) {
+        String[] seqs = line.split(";");
+        String lastOutput = "";
+        for (int si = 0; si < seqs.length; si++) {
+            String s = seqs[si].trim();
+            if (s.isEmpty()) continue;
+            lastOutput = shellExecLine(s, senderUin, peerUin, chatType);
+        }
+        return lastOutput;
+    }
+
     // 后台执行 &
     boolean bg = line.endsWith("&");
     if (bg) line = line.substring(0, line.length() - 1).trim();
