@@ -2685,11 +2685,10 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             for (int ei = 0; ei < Math.min(execTokens.size(), 6); ei++) { if (ei > 0) preview.append(" "); preview.append(execTokens.get(ei)); }
             taskScheduler.schedule(new Runnable() {
                 public void run() {
-                    daemonOutQueue.add(schPu + "|" + schCt + "|[延时任务] 即将执行: " + preview.toString());
-                    try { Thread.sleep(50); } catch (Exception e) {}
                     int[] ix = new int[]{0};
-                    try { parseSequence(scheduleTokens, ix, "", schSu, schPu, schCt); } catch (Exception e) {
-                        daemonOutQueue.add(schPu + "|" + schCt + "|[延时任务错误] " + e.getMessage());
+                    String result = parseSequence(scheduleTokens, ix, "", schSu, schPu, schCt);
+                    if (result != null && !result.isEmpty()) {
+                        daemonOutQueue.add(schPu + "|" + schCt + "|" + result);
                     }
                 }
             }, delayMs, TimeUnit.MILLISECONDS);
