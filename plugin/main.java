@@ -1494,7 +1494,9 @@ dumpMsgs.put(dj);
                     if (!output.equals("[已发送]") && !output.startsWith("[延时 ")) {
                         Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<shell_output>\n" + output + "\n</shell_output>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
                     }
-                    shellCalls.add(output);
+                    if (!output.equals("[已发送]")) {
+                        shellCalls.add(output);
+                    }
                     if (output.startsWith("[延时 ")) {
                         addToContext(ctx, "assistant", "好的，延时任务已创建", null);
                         hasSentReply = true;
@@ -1596,7 +1598,9 @@ dumpMsgs.put(dj);
                                 if (!out.equals("[已发送]") && !out.startsWith("[延时 ")) {
                                     Map ctxSo2 = new HashMap(); ctxSo2.put("role", "system"); ctxSo2.put("content", "<shell_output>\n" + out + "\n</shell_output>"); ctxSo2.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo2);
                                 }
-                                shellCalls.add(out);
+                                if (!out.equals("[已发送]")) {
+                                    shellCalls.add(out);
+                                }
                             }
                         }
                     }
