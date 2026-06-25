@@ -1492,6 +1492,11 @@ dumpMsgs.put(dj);
                     // 同时持久化原始shell命令，方便AI回顾
                     Map ctxCmd = new HashMap(); ctxCmd.put("role", "system"); ctxCmd.put("content", "<shell_cmd>" + cmd + "</shell_cmd>"); ctxCmd.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd);
                     shellCalls.add(output);
+                    if (output.startsWith("[延时 ")) {
+                        addToContext(ctx, "assistant", "好的，延时任务已创建", null);
+                        hasSentReply = true;
+                        sendMsg(peerUin, "[AI] 延时任务已创建，到点自动执行", chatType);
+                    }
                 }
             }
             else if (fn.equals("toggle_listen")) {
