@@ -2569,7 +2569,9 @@ static int nextDaemonPid = 1;
 
 // 单行命令解析与执行
 String shellExecLine(String line, String senderUin, String peerUin, int chatType) {
-    if (line == null || line.trim().isEmpty()) return "";
+    if (line == null || line.trim().isEmpty()) {
+        return "";
+    }
     line = line.trim();
 
     // 子Shell: ( ... )
@@ -2613,7 +2615,9 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         while (pos < line.length() && " |;&><\t".indexOf(line.charAt(pos)) < 0) pos++;
         tokens.add(line.substring(startW, pos));
     }
-    if (tokens.isEmpty()) return "";
+    if (tokens.isEmpty()) {
+        return "";
+    }
 
     // 后台标记
     boolean bg = tokens.size() > 0 && tokens.get(tokens.size() - 1).equals("&");
@@ -2787,26 +2791,36 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
 
         // Corax 命令
         if (cmd.equals("sed")) {
-            if (args.length < 2) return "用法: sed 's/查找/替换/g' <文件路径>";
+            if (args.length < 2) {
+                return "用法: sed 's/查找/替换/g' <文件路径>";
+            }
             String pattern = args[0];
             String filePath = args[1];
             boolean global = pattern.endsWith("g");
             if (global) pattern = pattern.substring(0, pattern.length() - 1);
-            if (!pattern.startsWith("s/") || !pattern.endsWith("/")) return "sed: 需 s/old/new/ 或 s/old/new/g";
+            if (!pattern.startsWith("s/") || !pattern.endsWith("/")) {
+                return "sed: 需 s/old/new/ 或 s/old/new/g";
+            }
             String inner = pattern.substring(2, pattern.length() - 1);
             int sep = inner.indexOf("/");
-            if (sep < 0) return "sed: 缺少分隔符";
+            if (sep < 0) {
+                return "sed: 缺少分隔符";
+            }
             String oldStr = inner.substring(0, sep);
             String newStr = inner.substring(sep + 1);
             String content = readFileString(filePath);
-            if (content.startsWith("(")) return "sed: " + content;
+            if (content.startsWith("(")) {
+                return "sed: " + content;
+            }
             if (global) content = content.replace(oldStr, newStr);
             else { int f = content.indexOf(oldStr); if (f >= 0) content = content.substring(0, f) + newStr + content.substring(f + oldStr.length()); }
             String err = writeFileString(filePath, content, false);
             return err != null ? err : "替换完成";
         }
         if (cmd.equals("corax-edit")) {
-            if (args.length < 3) return "用法: corax-edit <文件路径> <旧文本> --- <新文本>";
+            if (args.length < 3) {
+                return "用法: corax-edit <文件路径> <旧文本> --- <新文本>";
+            }
             String filePath = args[0];
             StringBuilder oldB = new StringBuilder(); StringBuilder newB = new StringBuilder();
             boolean sepReached = false;
@@ -2815,11 +2829,17 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
                 if (!sepReached) { if (oldB.length() > 0) oldB.append(" "); oldB.append(args[i]); }
                 else { if (newB.length() > 0) newB.append(" "); newB.append(args[i]); }
             }
-            if (!sepReached) return "用法: corax-edit <路径> <旧文本> --- <新文本>";
+            if (!sepReached) {
+                return "用法: corax-edit <路径> <旧文本> --- <新文本>";
+            }
             String content = readFileString(filePath);
-            if (content.startsWith("(")) return "编辑: " + content;
+            if (content.startsWith("(")) {
+                return "编辑: " + content;
+            }
             String oldS = oldB.toString(); String newS = newB.toString();
-            if (!content.contains(oldS)) return "未找到匹配文本";
+            if (!content.contains(oldS)) {
+                return "未找到匹配文本";
+            }
             content = content.replace(oldS, newS);
             String err = writeFileString(filePath, content, false);
             return err != null ? err : "已替换 1 处";
