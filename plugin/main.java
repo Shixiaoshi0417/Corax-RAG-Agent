@@ -2407,7 +2407,8 @@ String vfsReadVarLog(String path) {
 // ======= /dev/ =======
 // 消息总线 — 只读 FD，由 onMsg 注入
 static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
-static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList()); // daemon→主线程消息队列
+static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
+static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList()); // {at, tokens, su, pu, ct} // daemon→主线程消息队列
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
         if (msgBus.isEmpty()) {
@@ -2642,23 +2643,35 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         final String su = senderUin, pu = peerUin;
         final int ct = chatType;
         final int p = nextDaemonPid++;
+        final String fLine = line;
+        final String fSu = senderUin, fPu = peerUin;
+        final int fCt = chatType;
+        final int fP = nextDaemonPid++;
         Thread t = new Thread(new Runnable() {
+            volatile boolean running = true;
             public void run() {
                 try {
                     int[] ix = new int[]{0};
-                    parseSequence(finalTokens, ix, "", su, pu, ct);
+                    parseSequence(finalTokens, ix, "", fSu, fPu, fCt);
                 } catch (Exception e) {
-                    List q = (List) daemonOutputs.get(p);
-                    if (q == null) { q = java.util.Collections.synchronizedList(new ArrayList()); daemonOutputs.put(p, q); }
-                    q.add("stderr: " + e.getMessage());
+                    if (running) {
+                        daemonOutQueue.add(fPu + "|" + fCt + "|[daemon error] " + e.getMessage());
+                    }
                 }
-                finally { daemons.remove(p); daemonOutputs.remove(p); }
+                finally {
+                    running = false;
+                    daemons.remove(fP);
+                    daemonOutputs.remove(fP);
+                }
             }
         });
         t.setDaemon(true);
         t.start();
-        daemons.put(p, t);
-        return "[pid:" + p + "]";
+        daemons.put(fP, t);
+        if (finalTokens.contains("sleep")) {
+            daemonOutQueue.add(peerUin + "|" + chatType + "|[daemon#" + fP + "] 已启动，等待延迟...");
+        }
+        return "[pid:" + fP + "]";
     }
 
     return result != null ? result : "";
@@ -3412,14 +3425,36 @@ public void onPaiYiPai(String peerUin, int chatType, String operatorUin) {
 public void onMsg(Object msg) {
     if (msg == null) return;
     
-    // 排空 daemon 输出队列（主线程安全发送）
-    while (!daemonOutQueue.isEmpty()) {
+    // 检查并执行到期延时任务
+    long now = System.currentTimeMillis();
+    for (int di = 0; di < delayedTasks.size(); di++) {
+        Map task = (Map) delayedTasks.get(di);
+        long at = Long.parseLong(String.valueOf(task.get("at")));
+        if (now >= at) {
+            List toks = (List) task.get("tokens");
+            String su = (String) task.get("su");
+            String pu = (String) task.get("pu");
+            int ct = Integer.parseInt(String.valueOf(task.get("ct")));
+            int[] ix = new int[]{0};
+            try { parseSequence(toks, ix, "", su, pu, ct); } catch (Exception e) {}
+            delayedTasks.remove(di);
+            di--;
+        }
+    }
+    
+    // 排空 daemon 输出队列（主线程安全发送，去重防刷屏）
+    Set sentCache = new HashSet();
+    int sent = 0;
+    while (!daemonOutQueue.isEmpty() && sent < 3) {
         String item = (String) daemonOutQueue.remove(0);
+        if (!sentCache.add(item)) continue; // 去重
         String[] parts = item.split("\\|", 3);
         if (parts.length == 3) {
             sendMsg(parts[0], "[Output] " + parts[2], Integer.parseInt(parts[1]));
+            sent++;
         }
     }
+    if (!daemonOutQueue.isEmpty()) daemonOutQueue.clear(); // 清空剩余
     
     // 消息队列：正在处理消息时缓存新消息，不丢弃
     if (aiProcessing) {
