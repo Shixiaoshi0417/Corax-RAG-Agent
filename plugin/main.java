@@ -2427,7 +2427,7 @@ String vfsReadVarLog(String path) {
 static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
 static int onMainThread = 0;
 static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
-static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList()); // {at, tokens, su, pu, ct} // daemon→主线程消息队列
+static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList());
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
         if (msgBus.isEmpty()) {
@@ -2688,6 +2688,13 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             final List st = new ArrayList(execTokens);
             final String sSu = bgSu, sPu = bgPu;
             final int sCt = bgCt;
+            // 双保险：Timer精确 + 轮询兜底
+            Map task = new HashMap();
+            task.put("at", System.currentTimeMillis() + delayMs);
+            task.put("tokens", new ArrayList(execTokens));
+            task.put("su", bgSu); task.put("pu", bgPu); task.put("ct", bgCt);
+            delayedTasks.add(task);
+            
             if (delayTimer == null) delayTimer = new Timer(true);
             delayTimer.schedule(new TimerTask() {
                 public void run() {
@@ -3499,6 +3506,25 @@ public void onMsg(Object msg) {
     }
     
     // 检查并执行到期延时任务
+    // 轮询兜底：检查到期延时任务
+    long nowMs = System.currentTimeMillis();
+    synchronized (delayedTasks) {
+        for (int di = 0; di < delayedTasks.size(); di++) {
+            Map dtask = (Map) delayedTasks.get(di);
+            long at = Long.parseLong(String.valueOf(dtask.get("at")));
+            if (nowMs >= at) {
+                int[] ix = new int[]{0};
+                List dtoks = (List) dtask.get("tokens");
+                String dsu = (String) dtask.get("su");
+                String dpu = (String) dtask.get("pu");
+                int dct = Integer.parseInt(String.valueOf(dtask.get("ct")));
+                try { parseSequence(dtoks, ix, "", dsu, dpu, dct); } catch (Exception e) {}
+                delayedTasks.remove(di);
+                di--;
+            }
+        }
+    }
+    
     // 排空 daemon 输出队列（主线程安全发送，去重防刷屏）
     Set sentCache = new HashSet();
     int sent = 0;
