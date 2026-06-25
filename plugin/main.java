@@ -2213,7 +2213,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "corax-mem-create  corax-mem-rm  corax-mem-tag  corax-mem-search  corax-search  corax-fetch  corax-skill  corax-listen  corax-help";
+        return "sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -2788,6 +2788,44 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         }
 
         // Corax 命令
+        if (cmd.equals("sed")) {
+            if (args.length < 2) return "用法: sed 's/查找/替换/g' <文件路径>";
+            String pattern = args[0];
+            String filePath = args[1];
+            boolean global = pattern.endsWith("g");
+            if (global) pattern = pattern.substring(0, pattern.length() - 1);
+            if (!pattern.startsWith("s/") || !pattern.endsWith("/")) return "sed: 需 s/old/new/ 或 s/old/new/g";
+            String inner = pattern.substring(2, pattern.length() - 1);
+            int sep = inner.indexOf("/");
+            if (sep < 0) return "sed: 缺少分隔符";
+            String oldStr = inner.substring(0, sep);
+            String newStr = inner.substring(sep + 1);
+            String content = readFileString(filePath);
+            if (content.startsWith("(")) return "sed: " + content;
+            if (global) content = content.replace(oldStr, newStr);
+            else { int f = content.indexOf(oldStr); if (f >= 0) content = content.substring(0, f) + newStr + content.substring(f + oldStr.length()); }
+            String err = writeFileString(filePath, content, false);
+            return err != null ? err : "替换完成";
+        }
+        if (cmd.equals("corax-edit")) {
+            if (args.length < 3) return "用法: corax-edit <文件路径> <旧文本> --- <新文本>";
+            String filePath = args[0];
+            StringBuilder oldB = new StringBuilder(); StringBuilder newB = new StringBuilder();
+            boolean sepReached = false;
+            for (int i = 1; i < args.length; i++) {
+                if (!sepReached && args[i].equals("---")) { sepReached = true; continue; }
+                if (!sepReached) { if (oldB.length() > 0) oldB.append(" "); oldB.append(args[i]); }
+                else { if (newB.length() > 0) newB.append(" "); newB.append(args[i]); }
+            }
+            if (!sepReached) return "用法: corax-edit <路径> <旧文本> --- <新文本>";
+            String content = readFileString(filePath);
+            if (content.startsWith("(")) return "编辑: " + content;
+            String oldS = oldB.toString(); String newS = newB.toString();
+            if (!content.contains(oldS)) return "未找到匹配文本";
+            content = content.replace(oldS, newS);
+            String err = writeFileString(filePath, content, false);
+            return err != null ? err : "已替换 1 处";
+        }
         if (cmd.equals("corax-search")) {
             return doWebSearch(args.length > 0 ? args[0] : "");
         }
@@ -2865,7 +2903,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /usr/share/doc/corax/ 了解项目架构";
