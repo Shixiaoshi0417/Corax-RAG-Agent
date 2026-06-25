@@ -8,7 +8,8 @@ import java.util.Date;
 import android.os.Handler;
 import android.os.Looper;
 import java.net.*;
-import java.util.concurrent.*;
+import java.util.Timer;
+import java.util.TimerTask;
 import org.json.*;
 
 // ==================== 全局变量 ====================
@@ -34,7 +35,7 @@ static List cachedWakeWords = null;
 static long wakeWordsFileMtime = 0;
 
 static String cachedSkills = null;
-static ScheduledExecutorService taskScheduler = Executors.newSingleThreadScheduledExecutor();
+static Timer delayTimer = null;
 static boolean aiProcessing = false;
 static Queue msgQueue = new LinkedList();
 static final int MSG_QUEUE_MAX = 20;
@@ -2688,15 +2689,16 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             final int schCt = bgCt;
             StringBuilder preview = new StringBuilder();
             for (int ei = 0; ei < Math.min(execTokens.size(), 6); ei++) { if (ei > 0) preview.append(" "); preview.append(execTokens.get(ei)); }
-            taskScheduler.schedule(new Runnable() {
+            final List st = scheduleTokens;
+            final String sSu = schSu, sPu = schPu;
+            final int sCt = schCt;
+            if (delayTimer == null) delayTimer = new Timer(true);
+            delayTimer.schedule(new TimerTask() {
                 public void run() {
                     int[] ix = new int[]{0};
-                    String result = parseSequence(scheduleTokens, ix, "", schSu, schPu, schCt);
-                    if (result != null && !result.isEmpty()) {
-                        daemonOutQueue.add(schPu + "|" + schCt + "|" + result);
-                    }
+                    try { parseSequence(st, ix, "", sSu, sPu, sCt); } catch (Exception e) {}
                 }
-            }, delayMs, TimeUnit.MILLISECONDS);
+            }, delayMs);
             return "[延时 " + (delayMs / 1000) + "s: " + preview.toString() + "]";
         }
 
@@ -3455,7 +3457,7 @@ boolean isNumeric(String s) { return s != null && s.matches("[0-9]+"); }
 
 // ==================== 生命周期 ====================
 public void onDestroy() {
-    try { taskScheduler.shutdownNow(); } catch (Exception e) {}
+    if (delayTimer != null) { delayTimer.cancel(); delayTimer.purge(); delayTimer = null; }
     for (Object key : aiContexts.keySet()) {
         try {
             String[] parts = ((String) key).split("_");
