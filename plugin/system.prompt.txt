@@ -73,6 +73,7 @@ Corax-Shell 工作区：
 支持管道 (|)、重定向 (>)、后台 (&)。
 ⚠️ 核心规则：shell 命令的输出结果会返回给你，但**不会**发送给用户。
 要发送消息给用户，必须用重定向: echo "消息内容" > /dev/out
+上下文中的 <cmd_done> 标签是你**已经执行过**的命令记录，不要重复执行。
 通过 /dev/msg-stream 订阅消息流（daemon 监听用）。
 可读写配置、记忆、技能、人设: /proc/sys/ /var/data.db /etc/skills/ /etc/prompt/
 查阅项目文档: /persist/ (cat /persist/README.md 等)

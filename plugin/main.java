@@ -1490,7 +1490,7 @@ dumpMsgs.put(dj);
                     sr.put("content", "<shell_output>\n" + output + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
                     ai2Msgs.put(sr);
                     Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<shell_output>\n" + output + "\n</shell_output>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
-                    Map ctxCmd = new HashMap(); ctxCmd.put("role", "system"); ctxCmd.put("content", "<shell_cmd>" + cmd + "</shell_cmd>"); ctxCmd.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd);
+                    Map ctxCmd = new HashMap(); ctxCmd.put("role", "system"); ctxCmd.put("content", "<cmd_done>" + cmd + "</cmd_done>"); ctxCmd.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd);
                     shellCalls.add(output);
                     if (output.startsWith("[延时 ")) {
                         addToContext(ctx, "assistant", "好的，延时任务已创建", null);
@@ -1590,7 +1590,7 @@ dumpMsgs.put(dj);
                                 srm.put("content", "<shell_output>\n" + outNote + "\n</shell_output>\n继续基于以上输出处理。如果需要发送消息给用户，必须使用 > /dev/out 重定向。");
                                 ai2Msgs.put(srm);
                                 Map ctxSo2 = new HashMap(); ctxSo2.put("role", "system"); ctxSo2.put("content", "<shell_output>\n" + out + "\n</shell_output>"); ctxSo2.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo2);
-                                Map ctxCmd2 = new HashMap(); ctxCmd2.put("role", "system"); ctxCmd2.put("content", "<shell_cmd>" + scmd + "</shell_cmd>"); ctxCmd2.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd2);
+                                Map ctxCmd2 = new HashMap(); ctxCmd2.put("role", "system"); ctxCmd2.put("content", "<cmd_done>" + scmd + "</cmd_done>"); ctxCmd2.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd2);
                                 shellCalls.add(out);
                             }
                         }
@@ -2446,7 +2446,9 @@ void vfsWriteDevOut(String content, String peerUin, int chatType) {
         daemonOutQueue.add(peerUin + "|" + chatType + "|" + content);
         return;
     }
-    sendMsg(peerUin, "[Output] " + content, chatType);
+    String msg = "[Output] " + content;
+    lastAssistantMsg = msg;
+    sendMsg(peerUin, msg, chatType);
 }
 void vfsWriteDevExit(String content) {
     // daemon 退出信号，由 shell exec 的 & 分支处理
@@ -2659,7 +2661,8 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
     // 后台执行
     if (bg) {
         final List bgTokens = new ArrayList(tokens);
-        final String bgSu = senderUin, bgPu = peerUin;
+        final String bgSu = senderUin;
+        final String bgPu = peerUin;
         final int bgCt = chatType;
 
         // 提取 sleep 延时
@@ -2686,10 +2689,8 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             StringBuilder preview = new StringBuilder();
             for (int ei = 0; ei < Math.min(execTokens.size(), 6); ei++) { if (ei > 0) preview.append(" "); preview.append(execTokens.get(ei)); }
             final List st = new ArrayList(execTokens);
-            final String sSu = bgSu, sPu = bgPu;
-            final int sCt = bgCt;
             // 双保险：Timer精确 + 轮询兜底
-            Map task = new HashMap();
+            final Map task = new HashMap();
             task.put("at", System.currentTimeMillis() + delayMs);
             task.put("tokens", new ArrayList(execTokens));
             task.put("su", bgSu); task.put("pu", bgPu); task.put("ct", bgCt);
@@ -2698,8 +2699,21 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             if (delayTimer == null) delayTimer = new Timer(true);
             delayTimer.schedule(new TimerTask() {
                 public void run() {
-                    int[] ix = new int[]{0};
-                    try { parseSequence(st, ix, "", sSu, sPu, sCt); } catch (Exception e) {}
+                    // 标记已触发，防止轮询重复执行
+                    task.put("fired", Boolean.TRUE);
+                    // 投递到主线程执行，确保 sendMsg 能正常工作
+                    new Handler(Looper.getMainLooper()).post(new Runnable() {
+                        public void run() {
+                            onMainThread++;
+                            try {
+                                int[] ix = new int[]{0};
+                                parseSequence(st, ix, "", bgSu, bgPu, bgCt);
+                            } catch (Exception e) {}
+                            finally {
+                                onMainThread--;
+                            }
+                        }
+                    });
                 }
             }, delayMs);
             return "[延时 " + (delayMs / 1000) + "s: " + preview.toString() + "]";
@@ -2709,11 +2723,20 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         final int p = nextDaemonPid++;
         Thread t = new Thread(new Runnable() {
             public void run() {
-                try {
-                    int[] ix = new int[]{0};
-                    parseSequence(daemonTokens, ix, "", bgSu, bgPu, bgCt);
-                } catch (Exception e) {}
-                finally { daemons.remove(p); daemonOutputs.remove(p); }
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    public void run() {
+                        onMainThread++;
+                        try {
+                            int[] ix = new int[]{0};
+                            parseSequence(daemonTokens, ix, "", bgSu, bgPu, bgCt);
+                        } catch (Exception e) {}
+                        finally {
+                            onMainThread--;
+                            daemons.remove(p);
+                            daemonOutputs.remove(p);
+                        }
+                    }
+                });
             }
         });
         t.setDaemon(true); t.start();
@@ -2780,8 +2803,10 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
         // 输出重定向
         if (outRedir != null && !pipeIn.isEmpty()) {
             String werr = vfsWrite(outRedir, pipeIn, outAppend, senderUin, peerUin, chatType);
-            if (outRedir.equals("/dev/out") && werr == null) {
-                pipeIn = "";
+            if (werr != null) {
+                pipeIn = werr;
+            } else if (outRedir.equals("/dev/out")) {
+                pipeIn = "[已发送到 /dev/out: " + (pipeIn.length() > 100 ? pipeIn.substring(0, 100) + "..." : pipeIn) + "]";
             } else {
                 pipeIn = "";
             }
@@ -2814,7 +2839,10 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return vfsRead(path, senderUin, peerUin, chatType);
         }
         if (cmd.equals("ls")) {
-            String path = args.length > 0 ? args[0] : "/";
+            String path = "/";
+            for (int i = 0; i < args.length; i++) {
+                if (!args[i].startsWith("-")) { path = args[i]; break; }
+            }
             return vfsRead(path, senderUin, peerUin, chatType);
         }
         if (cmd.equals("grep")) {
@@ -3506,11 +3534,16 @@ public void onMsg(Object msg) {
     }
     
     // 检查并执行到期延时任务
-    // 轮询兜底：检查到期延时任务
+    // 轮询兜底：检查到期延时任务（Timer已触发的跳过）
     long nowMs = System.currentTimeMillis();
     synchronized (delayedTasks) {
         for (int di = 0; di < delayedTasks.size(); di++) {
             Map dtask = (Map) delayedTasks.get(di);
+            if (Boolean.TRUE.equals(dtask.get("fired"))) {
+                delayedTasks.remove(di);
+                di--;
+                continue;
+            }
             long at = Long.parseLong(String.valueOf(dtask.get("at")));
             if (nowMs >= at) {
                 int[] ix = new int[]{0};
@@ -3533,7 +3566,9 @@ public void onMsg(Object msg) {
         if (!sentCache.add(item)) continue; // 去重
         String[] parts = item.split("\\|", 3);
         if (parts.length == 3) {
-            sendMsg(parts[0], "[Output] " + parts[2], Integer.parseInt(parts[1]));
+            String outMsg = "[Output] " + parts[2];
+            lastAssistantMsg = outMsg;
+            sendMsg(parts[0], outMsg, Integer.parseInt(parts[1]));
             sent++;
         }
     }
