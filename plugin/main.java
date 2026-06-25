@@ -1533,8 +1533,6 @@ dumpMsgs.put(dj);
                         }
                         addToContext(ctx, "assistant", r2c, null);
                     }
-                        hasSentReply = true;
-                    }
                 }
                 break;
             }
