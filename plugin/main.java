@@ -1527,11 +1527,11 @@ dumpMsgs.put(dj);
                                 if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
                                 else sendMsg(peerUin, seg, chatType);
                                 hasSentReply = true;
+                                try { Thread.sleep(150); } catch (Exception ignored) { }
                             }
                         }
                         addToContext(ctx, "assistant", r2c, null);
-                    } else if (!hasSentReply) {
-                        sendMsg(peerUin, "[AI] 根据已有信息无法回答", chatType);
+                    }
                         hasSentReply = true;
                     }
                 }
@@ -1552,6 +1552,7 @@ dumpMsgs.put(dj);
                             if (isFirstReply) { if (msg.msgId != 0) sendReplyMsg(peerUin, msg.msgId, seg, chatType); isFirstReply = false; }
                             else sendMsg(peerUin, seg, chatType);
                             hasSentReply = true;
+                            try { Thread.sleep(150); } catch (Exception ignored) { }
                         }
                     }
                     addToContext(ctx, "assistant", r2c, null);
@@ -2417,8 +2418,7 @@ String vfsReadDev(String path, String peerUin, int chatType) {
     return "[只写设备或不存在]";
 }
 void vfsWriteDevOut(String content, String peerUin, int chatType) {
-    String prefix = "1".equals(getAiConfig("ai_prefix")) ? "[AI] " : "";
-    sendMsg(peerUin, prefix + content, chatType);
+    sendMsg(peerUin, "[Output] " + content, chatType);
 }
 void vfsWriteDevExit(String content) {
     // daemon 退出信号，由 shell exec 的 & 分支处理
