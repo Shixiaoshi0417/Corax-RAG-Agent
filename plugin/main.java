@@ -1492,7 +1492,6 @@ dumpMsgs.put(dj);
                     }
                 }
             }
-            else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
                 boolean enable = getToolArg(tc, "enable").equals("true");
                 String key = peerUin + "_" + chatType;
@@ -3130,12 +3129,19 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             }
             int oldW = 1; String origSubject = senderUin;
             Cursor c = null;
-            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String s = c.getString(1); if (s != null && !s.isEmpty()) origSubject = s; } } catch (Exception e) { }
+            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String s = c.getString(1); if (s != null && !s.isEmpty()) origSubject = s; } }
+            catch (Exception e) { }
             finally { if (c != null) c.close(); }
             deleteMemoryById(id, senderUin, userRole);
             storeMemory(senderUin, content, tags, "private", origSubject);
             Cursor last = null;
-            try { last = getDb().rawQuery("SELECT id FROM memories WHERE uin=? AND scope='private' ORDER BY id DESC LIMIT 1", new String[]{senderUin}); if (last.moveToFirst()) { long lastId = last.getLong(0); getDb().execSQL("UPDATE memories SET weight=? WHERE id=?", new Object[]{oldW + 1, lastId}); } } catch (Exception e) { }
+            try {
+                last = getDb().rawQuery("SELECT id FROM memories WHERE uin=? AND scope='private' ORDER BY id DESC LIMIT 1", new String[]{senderUin});
+                if (last.moveToFirst()) {
+                    long lastId = last.getLong(0);
+                    getDb().execSQL("UPDATE memories SET weight=? WHERE id=?", new Object[]{oldW + 1, lastId});
+                }
+            } catch (Exception e) { }
             finally { if (last != null) last.close(); }
         } else if (fname.equals("overwrite_public_memory")) {
             int id = getToolArgInt(tc, "id"); String content = getToolArg(tc, "content"); String tags = getToolArg(tc, "tags");
@@ -3144,12 +3150,27 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             }
             int oldW = 1; String origSubject = senderUin;
             Cursor c = null;
-            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String s = c.getString(1); if (s != null && !s.isEmpty()) origSubject = s; } } catch (Exception e) { }
+            try {
+                c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)});
+                if (c.moveToFirst()) {
+                    oldW = c.getInt(0);
+                    String s = c.getString(1);
+                    if (s != null && !s.isEmpty()) origSubject = s;
+                }
+            }
+            catch (Exception e) { }
             finally { if (c != null) c.close(); }
             deleteMemoryById(id, senderUin, userRole);
             storeMemory(senderUin, content, tags, "public", origSubject);
             Cursor last = null;
-            try { last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null); if (last.moveToFirst()) { int lastId = last.getInt(0); getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId); } } catch (Exception e) { }
+            try {
+                last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null);
+                if (last.moveToFirst()) {
+                    int lastId = last.getInt(0);
+                    getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId);
+                }
+            }
+            catch (Exception e) { }
             finally { if (last != null) last.close(); }
         } else if (fname.equals("delete_memory")) { int id = getToolArgInt(tc, "id"); if (id > 0) deleteMemoryById(id, senderUin, userRole); }
     } catch (Exception e) { this.log("error.txt", "execMem: " + e.getMessage()); }
@@ -3215,7 +3236,14 @@ void handleAiMemory(Object msg, String args) {
         String kw = parts[1];
         List found = kw.startsWith("tag:") ? searchMemoriesByTag(senderUin, kw.substring(4)) : searchMemories(senderUin, kw);
         if (found.isEmpty()) sendStyledHeader(msg, "INFO", "没有匹配 \"" + kw + "\"");
-        else { StringBuilder sb = new StringBuilder(); sb.append("[搜索 \"").append(kw).append("\"] ").append(found.size()).append(" 条:\n"); for (int i = 0; i < found.size(); i++) { Map m = (Map) found.get(i); sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n"); } sendStyledHeader(msg, "INFO", sb.toString()); }
+        else { StringBuilder sb = new StringBuilder();
+        sb.append("[搜索 \"").append(kw).append("\"] ").append(found.size()).append(" 条:\n");
+        for (int i = 0;
+        i < found.size();
+        i++) { Map m = (Map) found.get(i);
+        sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
+        } sendStyledHeader(msg, "INFO", sb.toString());
+        }
         return;
     }
     if (sub.equals("set")) {
@@ -3424,7 +3452,9 @@ void handleAiSet(Object msg, String args) {
     String[] vk = { "api_key","model","ai_url","context_ttl","context_limit","search_provider","search_api_key","show_stats","debug","ai_prefix","shell_rounds","temperature","pat_wake","sewarden" };
     boolean valid = false; for (int i = 0; i < vk.length; i++) if (vk[i].equals(key)) { valid = true; break; }
     if (!valid) { sendStyledHeader(msg, "ERROR", "无效: " + key); return; }
-    if (key.equals("context_ttl") || key.equals("context_limit") || key.equals("show_stats") || key.equals("debug") || key.equals("pat_wake")) { try { Integer.parseInt(value); } catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是整数"); return; } }
+    if (key.equals("context_ttl") || key.equals("context_limit") || key.equals("show_stats") || key.equals("debug") || key.equals("pat_wake")) { try { Integer.parseInt(value); }
+    catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是整数");
+    return; } }
     if (key.equals("temperature")) { try { double d = Double.parseDouble(value); if (d < 0 || d > 2) { sendStyledHeader(msg, "ERROR", "temperature 0~2"); return; } } catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是小数"); return; } }
     Map cfg = loadAiConfig(); cfg.put(key, value); saveAiConfig(cfg);
     sendStyledHeader(msg, "INFO", "已更新: " + key);
@@ -3612,7 +3642,9 @@ public void onMsg(Object msg) {
     }
     String peerUin = String.valueOf(msg.peerUin);
     int chatType = msg.type;
-    String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\"" + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200)) + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
+    String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\""
+        + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200))
+        + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
     vfsPushMsgBus(msgJson);
     String trimmed = text.trim();
     
@@ -3686,9 +3718,20 @@ public void onMsg(Object msg) {
                         Object re = rf.get(el);
                         if (re != null) {
                             String ruin = "";
-                            try { java.lang.reflect.Field sf = re.getClass().getDeclaredField("senderUin"); sf.setAccessible(true); Object su = sf.get(re); if (su != null && !su.toString().isEmpty()) ruin = su.toString(); } catch (Exception ex2) { }
+                            try {
+                                java.lang.reflect.Field sf = re.getClass().getDeclaredField("senderUin");
+                                sf.setAccessible(true);
+                                Object su = sf.get(re);
+                                if (su != null && !su.toString().isEmpty()) ruin = su.toString();
+                            } catch (Exception ex2) { }
                             quotedUin = ruin;
-                            try { java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText"); sf.setAccessible(true); Object src = sf.get(re); if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); } } catch (Exception ex2) { }
+                            try {
+                                java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText");
+                                sf.setAccessible(true);
+                                Object src = sf.get(re);
+                                if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); }
+                            }
+                            catch (Exception ex2) { }
                             break;
                         }
                     }
