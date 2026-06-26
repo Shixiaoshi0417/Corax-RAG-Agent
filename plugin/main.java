@@ -1422,6 +1422,9 @@ dumpMsgs.put(dj);
     } else { sendStyledHeader(msg, "ERROR", "AI 服务暂时不可用"); aiProcessing = false; return; }
 
     // ctx 顺序：先记录 user + R1，再处理工具循环（R2 助理回复在其后，保证历史顺序正确）
+    addToContext(ctx, "system",
+        "<t>" + getCurrentTime() + "</t><s><user uin=\"" + senderUin + "\" access=\"" + userRole + "\" display=\"" + senderName + "\" /></s>",
+        null);
     addToContext(ctx, "user",
         "<t>" + getCurrentTime() + "</t><u>" + prompt + "</u>",
         senderUin);
