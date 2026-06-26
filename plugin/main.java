@@ -1495,7 +1495,7 @@ dumpMsgs.put(dj);
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
                 if (!quiet) {
-                    String tcid = tc.getJSONObject("function").optString("id", "call_" + System.currentTimeMillis());
+                    String tcid = tc.optString("id", "call_" + System.currentTimeMillis());
                     JSONObject sr = new JSONObject();
                     String outText = output.isEmpty() ? "[命令已执行，输出已重定向到 /dev/out]" : output;
                     sr.put("role", "tool");
@@ -1598,7 +1598,7 @@ dumpMsgs.put(dj);
                             boolean q = (Boolean) qr2.get("quiet");
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
                             if (!q && !out.isEmpty()) {
-                                String rtcid = rtc.getJSONObject("function").optString("id", "rcall_" + System.currentTimeMillis());
+                                String rtcid = rtc.optString("id", "rcall_" + System.currentTimeMillis());
                                 JSONObject srm = new JSONObject();
                                 srm.put("role", "tool");
                                 srm.put("tool_call_id", rtcid);
