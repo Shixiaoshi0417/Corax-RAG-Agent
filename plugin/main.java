@@ -1582,8 +1582,7 @@ dumpMsgs.put(dj);
                                 String outNote = out.isEmpty() ? "(无输出)" : out;
                                 srm.put("content", "<shell_output>\n" + outNote + "\n</shell_output>\n继续基于以上输出处理。如果需要发送消息给用户，必须使用 > /dev/out 重定向。");
                                 ai2Msgs.put(srm);
-                                Map ctxSo2 = new HashMap(); ctxSo2.put("role", "system"); ctxSo2.put("content", "<shell_output>\n" + out + "\n</shell_output>"); ctxSo2.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo2);
-                                Map ctxCmd2 = new HashMap(); ctxCmd2.put("role", "system"); ctxCmd2.put("content", "<cmd_done>" + scmd + "</cmd_done>"); ctxCmd2.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd2);
+                                Map ctxCr = new HashMap(); ctxCr.put("role", "system"); ctxCr.put("content", "<cmd_result>\n# 命令: " + scmd + "\n# 结果: " + out + "\n</cmd_result>"); ctxCr.put("_ts", System.currentTimeMillis()); ctx.add(ctxCr);
                                 shellCalls.add(out);
                             }
                         }
@@ -1773,7 +1772,7 @@ String sewardenClean(String text) {
                .replace("<warn", "〈warn")
                .replace("<skills", "〈skills")
                .replace("<refmsgid", "〈refmsgid")
-               .replace("<cmd_done", "〈cmd_done")
+               .replace("<cmd_result", "〈cmd_result")
                .replace("<shell_output", "〈shell_output")
                .replace("<reminder", "〈reminder")
                .replace("<debug", "〈debug");
