@@ -1586,7 +1586,13 @@ dumpMsgs.put(dj);
                     // AI 返回空内容，静默跳过（shell 模式下正常）
                     hasSentReply = true;
                 }
-                JSONArray sr2tc = null; if (sr2.containsKey("tool_calls")) sr2tc = (JSONArray) sr2.get("tool_calls");
+                JSONArray sr2tc = null; if (sr2.containsKey("tool_calls")) { sr2tc = (JSONArray) sr2.get("tool_calls");
+                    JSONObject asstTC2 = new JSONObject();
+                    asstTC2.put("role", "assistant");
+                    asstTC2.put("content", r2c != null ? r2c : "");
+                    asstTC2.put("tool_calls", sr2tc);
+                    ai2Msgs.put(asstTC2);
+                }
                 if (sr2tc != null) for (int i = 0; i < sr2tc.length(); i++) {
                     JSONObject rtc = sr2tc.getJSONObject(i);
                     String rfn = rtc.getJSONObject("function").getString("name");
