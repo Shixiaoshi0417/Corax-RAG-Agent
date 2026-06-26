@@ -3120,8 +3120,17 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return "用法: corax-listen <on|off|status>";
         }
         if (cmd.equals("stat")) {
-            if (args.length < 1) { return "用法: stat <路径>"; }
-            String path = args[0];
+            if (args.length < 1) {
+                return "用法: stat <路径>";
+            }
+            String arg1 = args[0];
+            String path = arg1;
+            if (arg1.startsWith("-") && args.length > 1) {
+                path = args[1];
+            }
+            if (path.startsWith("-")) {
+                return "用法: stat <路径>";
+            }
             String content = vfsRead(path, senderUin, peerUin, chatType);
             if (content.startsWith("[路径不存在")) { return content; }
             boolean isDir = false;
@@ -3146,19 +3155,25 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return "文件: " + path + "\n类型: " + (isDir ? "目录" : "文件") + "\n大小: " + size + " 字符\n权限: " + perms;
         }
         if (cmd.equals("touch")) {
-            if (args.length < 1) { return "用法: touch <文件路径>"; }
+            if (args.length < 1) {
+                return "用法: touch <文件路径>";
+            }
             String path = args[0];
             String ferr = vfsWrite(path, "", true, senderUin, peerUin, chatType);
             return ferr != null ? ferr : "";
         }
         if (cmd.equals("rm")) {
-            if (args.length < 1) { return "用法: rm <文件路径>"; }
+            if (args.length < 1) {
+                return "用法: rm <文件路径>";
+            }
             String path = args[0];
             String err = vfsWrite(path, "", false, senderUin, peerUin, chatType);
             return err != null ? err : "已删除";
         }
         if (cmd.equals("mkdir")) {
-            if (args.length < 1) { return "用法: mkdir <目录路径>"; }
+            if (args.length < 1) {
+                return "用法: mkdir <目录路径>";
+            }
             String path = args[0];
             if (!path.endsWith("/")) path += "/";
             String err = vfsWrite(path, "(目录)", false, senderUin, peerUin, chatType);
@@ -3168,7 +3183,9 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             return "";
         }
         if (cmd.equals("find")) {
-            if (args.length < 2) { return "用法: find <目录> -name <模式>"; }
+            if (args.length < 2) {
+                return "用法: find <目录> -name <模式>";
+            }
             String dir = args[0];
             String pattern = args.length > 2 && args[1].equals("-name") ? args[2] : "";
             if (pattern.isEmpty()) { return "用法: find <目录> -name <模式>"; }
@@ -3225,7 +3242,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /usr/share/doc/corax/ 了解项目架构";
         }
-        return cmd + ": command not found, try corax-help";
+        return cmd + ": 命令不存在。查看可用命令: corax-help";
     } catch (Exception e) {
         return cmd + ": " + e.getMessage();
     }
