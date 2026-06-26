@@ -1483,9 +1483,7 @@ dumpMsgs.put(dj);
                     sr.put("content", "<shell_output>\n" + outText + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
                     ai2Msgs.put(sr);
                     if (!output.isEmpty()) {
-                        Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<shell_output>\n" + output + "\n</shell_output>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
-                    }
-                    Map ctxCmd = new HashMap(); ctxCmd.put("role", "system"); ctxCmd.put("content", "<cmd_done>" + cmd + "</cmd_done>"); ctxCmd.put("_ts", System.currentTimeMillis()); ctx.add(ctxCmd);
+                    Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<cmd_result>\n# 命令: " + cmd + "\n# 结果: " + output + "\n</cmd_result>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
                     shellCalls.add(outText);
                     if (output.startsWith("[延时 ")) {
                         addToContext(ctx, "assistant", "好的，延时任务已创建", null);
