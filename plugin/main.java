@@ -2987,6 +2987,17 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("date")) {
             return getCurrentTime();
         }
+        if (cmd.equals("mount")) {
+            return "/proc on /proc type corax-proc (rw)\n"
+                + "/etc on /etc type corax-config (rw)\n"
+                + "/dev on /dev type corax-device (rw)\n"
+                + "/ctx on /ctx type corax-ctx (rw)\n"
+                + "/var on /var type corax-data (rw)\n"
+                + "/tmp on /tmp type corax-tmp (rw)\n"
+                + "/persist on /persist type corax-persist (rw)\n"
+                + "/src on /src type corax-src (ro)\n"
+                + "/usr on /usr type corax-doc (ro)";
+        }
         if (cmd.equals("sleep")) {
             if (args.length < 1) {
                 return "sleep: 需要秒数参数";
