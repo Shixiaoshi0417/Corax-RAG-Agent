@@ -941,7 +941,10 @@ String buildAI2Prompt(String peerUin, int chatType) {
     sb.append("<skills>\n");
     sb.append("记忆：#M/#MP私有 #P/#PP公有。标签必打。用户透露信息时主动corax-mem-create。\n");
     sb.append("搜索：corax-mem-tag(标签) corax-mem-search(关键词)。\n");
-    sb.append("联网：corax-search/corax-fetch，≤" + shellRounds + "轮必须回复。\n");
+    sb.append("联网：corax-search/corax-fetch，≤");
+    int shellRounds = 8;
+    try { shellRounds = Integer.parseInt(getAiConfig("shell_rounds")); } catch (Exception e) { }
+    sb.append(shellRounds + "轮必须回复。\n");
     sb.append("定时：sleep N && cmd > /dev/out &\n");
     sb.append("</skills>\n");
     
