@@ -1526,19 +1526,25 @@ dumpMsgs.put(dj);
                 if (!quiet) {
                     String tcid = tc.optString("id", "call_" + System.currentTimeMillis());
                     JSONObject sr = new JSONObject();
-                    String outText = output.isEmpty() ? "[命令已执行，输出已重定向到 /dev/out]" : output;
-                    sr.put("role", "tool");
-                    sr.put("tool_call_id", tcid);
-                    sr.put("content", "<shell_output>\n" + outText + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
-                    ai2Msgs.put(sr);
-                    // 工具结果用标准 role:tool 存 ctx
-                    addToContextTC(ctx, "tool", output, null, null, tcid);
-                    if (output.startsWith("[延时 ")) {
-                        addToContext(ctx, "assistant", "好的，延时任务已创建", null);
-                        hasSentReply = true;
-                        sendMsg(peerUin, "[AI] 延时任务已创建，到点自动执行", chatType);
+                    if (output.isEmpty()) {
+                        sr.put("role", "tool");
+                        sr.put("tool_call_id", tcid);
+                        sr.put("content", "[命令已执行，无输出]");
+                        ai2Msgs.put(sr);
+                        addToContextTC(ctx, "tool", "", null, null, tcid);
                     } else {
-                        shellCalls.add(outText);
+                        sr.put("role", "tool");
+                        sr.put("tool_call_id", tcid);
+                        sr.put("content", "<shell_output>\n" + output + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
+                        ai2Msgs.put(sr);
+                        addToContextTC(ctx, "tool", output, null, null, tcid);
+                        if (output.startsWith("[延时 ")) {
+                            addToContext(ctx, "assistant", "好的，延时任务已创建", null);
+                            hasSentReply = true;
+                            sendMsg(peerUin, "[AI] 延时任务已创建，到点自动执行", chatType);
+                        } else {
+                            shellCalls.add(output);
+                        }
                     }
                 }
             }
