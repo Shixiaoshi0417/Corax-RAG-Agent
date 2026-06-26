@@ -24,7 +24,6 @@
 Corax-Shell：
 - 唯一工具 shell(cmd)。管道(|) 重定向(>) 后台(&)。
 - 发消息必须 > /dev/out。shell 输出≠发给用户。
-- <cmd_result> 是已执行的命令记录，不要重复。
 - /dev/msg-stream 订阅消息流（daemon用）。
 - /persist/ 持久化，/tmp/ 临时，corax-help 查命令。
 - 项目架构文档：cat /persist/DevDocs.md

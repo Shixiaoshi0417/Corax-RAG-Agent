@@ -981,6 +981,8 @@ List getAiContext(String peerUin, int chatType) {
                     m.put("role", j.getString("role"));
                     m.put("content", j.getString("content"));
                     if (j.has("name")) m.put("name", j.getString("name"));
+                    if (j.has("tool_calls")) m.put("tool_calls", j.getJSONArray("tool_calls"));
+                    if (j.has("tool_call_id")) m.put("tool_call_id", j.getString("tool_call_id"));
                     m.put("_ts", j.getLong("_ts"));
                     ctx.add(m);
                 }
@@ -1021,6 +1023,8 @@ void saveCtxToDisk(String peerUin, int chatType) {
             j.put("role", m.get("role"));
             j.put("content", m.get("content"));
             if (m.get("name") != null) j.put("name", m.get("name"));
+            if (m.get("tool_calls") != null) j.put("tool_calls", m.get("tool_calls"));
+            if (m.get("tool_call_id") != null) j.put("tool_call_id", m.get("tool_call_id"));
             j.put("_ts", m.get("_ts"));
             arr.put(j);
         }
@@ -1034,6 +1038,18 @@ void addToContext(List ctx, String role, String content, String name) {
     Map m = new HashMap();
     m.put("role", role); m.put("content", content);
     if (name != null) m.put("name", name);
+    m.put("_ts", System.currentTimeMillis()); ctx.add(m);
+    int ctxLimit = 60;
+    try { ctxLimit = Integer.parseInt(getAiConfig("context_limit")); } catch (Exception e) { }
+    while (ctx.size() > ctxLimit * 2) ctx.remove(0);
+}
+
+void addToContextTC(List ctx, String role, String content, String name, JSONArray toolCalls, String toolCallId) {
+    Map m = new HashMap();
+    m.put("role", role); m.put("content", content);
+    if (name != null) m.put("name", name);
+    if (toolCalls != null) m.put("tool_calls", toolCalls);
+    if (toolCallId != null) m.put("tool_call_id", toolCallId);
     m.put("_ts", System.currentTimeMillis()); ctx.add(m);
     int ctxLimit = 60;
     try { ctxLimit = Integer.parseInt(getAiConfig("context_limit")); } catch (Exception e) { }
@@ -1329,74 +1345,77 @@ dumpMsgs.put(dj);
 
     aiProcessing = true;
 
-    String ai2Prompt = buildAI2Prompt(peerUin, chatType);
     JSONArray ai2Tools = buildAI2Tools();
     JSONArray ai2Msgs = new JSONArray();
 
-    // ctx: 只含历史（已是带注解格式）
+    // ctx: 只含历史（已是标准格式）
     for (int i = 0; i < ctx.size(); i++) {
         Map m = (Map) ctx.get(i);
         JSONObject j = new JSONObject();
         j.put("role", m.get("role"));
         j.put("content", m.get("content"));
         if (m.get("name") != null) j.put("name", m.get("name"));
+        if (m.get("tool_calls") != null) j.put("tool_calls", m.get("tool_calls"));
+        if (m.get("tool_call_id") != null) j.put("tool_call_id", m.get("tool_call_id"));
         ai2Msgs.put(j);
     }
 
-    // === 当前轮新鲜注入层（末尾，不进 ctx） ===
-    
-    // v4.0: 唤醒点标记——仅在监听模式且被唤醒时注入
+    // === 集中构建系统上下文（合并为一条消息） ===
+    StringBuilder sysCtx = new StringBuilder();
+    String persona = loadPersona();
+    if (!persona.isEmpty()) { sysCtx.append(persona).append("\n\n"); }
+    else { sysCtx.append("你是墨鸦,一个有长期记忆的 AI 助手。\n\n"); }
+    String sysPrompt = loadSystemPrompt();
+    if (!sysPrompt.isEmpty()) sysCtx.append(sysPrompt).append("\n\n");
+
+    // 唤醒标记
     String lkey = peerUin + "_" + chatType;
     if (listenSessions != null && listenSessions.contains(lkey)) {
-        JSONObject wakeMark = new JSONObject();
-        wakeMark.put("role", "system");
-        wakeMark.put("content", "<wake t=\"" + getCurrentTime() + "\" />");
-        ai2Msgs.put(wakeMark);
+        sysCtx.append("<wake t=\"").append(getCurrentTime()).append("\" />\n");
     }
     // 公有记忆
     String pubStrata = buildPublicStrata();
-    if (!pubStrata.isEmpty()) {
-        JSONObject ps = new JSONObject(); ps.put("role", "system"); ps.put("content", pubStrata); ai2Msgs.put(ps);
-    }
-
+    if (!pubStrata.isEmpty()) sysCtx.append(pubStrata).append("\n");
     // 私有记忆
-     String privStrata = buildStrataContext(senderUin);
-     if (!privStrata.isEmpty()) {
-         JSONObject pvs = new JSONObject(); pvs.put("role", "system"); pvs.put("content", privStrata); ai2Msgs.put(pvs);
-    }
-
-    // 可用技能
+    String privStrata = buildStrataContext(senderUin);
+    if (!privStrata.isEmpty()) sysCtx.append(privStrata).append("\n");
+    // 技能
     String skills = loadSkills();
-    if (!skills.isEmpty()) {
-        JSONObject skl = new JSONObject(); skl.put("role", "system"); skl.put("content", "=== 可用技能 ===\n" + skills); ai2Msgs.put(skl);
-    }
+    if (!skills.isEmpty()) sysCtx.append("=== 可用技能 ===\n").append(skills).append("\n");
 
-    // 被引用者身份 + 被引用原文（双 system 消息，紧邻排列）
+    // 当前场景
+    sysCtx.append(chatType == 2 ? "群聊 群号:" + peerUin : "私聊").append(" 时间:").append(getCurrentTime()).append("\n");
+    if (!atInfo.isEmpty()) sysCtx.append(atInfo).append("\n");
+
+    // 被引用者
     if (!quotedText.isEmpty()) {
         String quotedRole = getRole(quotedUin);
         String quotedName = getMemberName(chatType, peerUin, quotedUin);
-        quotedName = quotedName.replaceAll("[<{＜【\\[（(].*?[>}＞】\\]）)]", "")
+        quotedName = quotedName.replaceAll("[<{＜【\\\\[（(].*?[>}＞】\\\\]）)]", "")
                                .replaceAll("[,，:：;；]", "").trim();
         if (quotedName.isEmpty()) quotedName = quotedUin;
-
-        // 被引用者身份（独立 system 消息）
-        JSONObject sysQuotedUser = new JSONObject();
-        sysQuotedUser.put("role", "system");
-        sysQuotedUser.put("content", "<t>" + getCurrentTime() + "</t><s><user uin=\"" + quotedUin + "\" access=\"" + quotedRole + "\" display=\"" + quotedName + "\" /></s>");
-        ai2Msgs.put(sysQuotedUser);
-
-        // 被引用原文（独立 system 消息，紧跟在身份之后）
-        JSONObject sysQuote = new JSONObject();
-        sysQuote.put("role", "system");
-        sysQuote.put("content", "<t>" + getCurrentTime() + "</t><quote><quoter_uid>" + quotedUin + "</quoter_uid><quoter_time>" + getCurrentTime() + "</quoter_time><quote_content>" + quotedText + "</quote_content></quote>");
-        ai2Msgs.put(sysQuote);
+        sysCtx.append("<t>").append(getCurrentTime()).append("</t><s><user uin=\"").append(quotedUin)
+              .append("\" access=\"").append(quotedRole).append("\" display=\"").append(quotedName).append("\" /></s>\n");
+        sysCtx.append("<t>").append(getCurrentTime()).append("</t><quote><quoter_uid>").append(quotedUin)
+              .append("</quoter_uid><quote_content>").append(quotedText).append("</quote_content></quote>\n");
     }
-    
-    // 当前消息发出者身份（独立 system 消息）
-    JSONObject sysCurrentUser = new JSONObject();
-    sysCurrentUser.put("role", "system");
-    sysCurrentUser.put("content", "<t>" + getCurrentTime() + "</t><s><user uin=\"" + senderUin + "\" access=\"" + userRole + "\" display=\"" + senderName + "\" /></s>");
-    ai2Msgs.put(sysCurrentUser);
+
+    // 当前发言者身份
+    sysCtx.append("<t>").append(getCurrentTime()).append("</t><s><user uin=\"").append(senderUin)
+          .append("\" access=\"").append(userRole).append("\" display=\"").append(senderName).append("\" /></s>\n");
+
+    // 技能清单
+    sysCtx.append("<skills>\n");
+    sysCtx.append("记忆：#M/#MP私有 #P/#PP公有。标签必打。用户透露信息时主动corax-mem-create。\n");
+    sysCtx.append("搜索：corax-mem-tag(标签) corax-mem-search(关键词)。\n");
+    sysCtx.append("联网：corax-search/corax-fetch，≤");
+    int shellRounds = 8;
+    try { shellRounds = Integer.parseInt(getAiConfig("shell_rounds")); } catch (Exception e) { }
+    sysCtx.append(shellRounds).append("轮必须回复。\n");
+    sysCtx.append("定时：sleep N && cmd > /dev/out &\n");
+    sysCtx.append("</skills>");
+
+    String ai2Prompt = sysCtx.toString();
 
     // 当前用户消息（纯净正文，name 只存 UIN）
     JSONObject usr = new JSONObject();
@@ -1428,9 +1447,8 @@ dumpMsgs.put(dj);
     addToContext(ctx, "user",
         "<t>" + getCurrentTime() + "</t><u>" + prompt + "</u>",
         senderUin);
-    if (!ai2Content.isEmpty()) {
-        addToContext(ctx, "assistant", ai2Content, null);
-    }
+    // 持久化本次 AI 调用：assistant 消息带 tool_calls（标准 OpenAI 格式）
+    addToContextTC(ctx, "assistant", ai2Content, null, ai2TCs, null);
 
     if (debug) {
         String dbg = "R1 content: " + ai2Content;
@@ -1477,24 +1495,24 @@ dumpMsgs.put(dj);
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
                 if (!quiet) {
+                    String tcid = tc.getJSONObject("function").optString("id", "call_" + System.currentTimeMillis());
                     JSONObject sr = new JSONObject();
                     String outText = output.isEmpty() ? "[命令已执行，输出已重定向到 /dev/out]" : output;
-                    sr.put("role", "system");
+                    sr.put("role", "tool");
+                    sr.put("tool_call_id", tcid);
                     sr.put("content", "<shell_output>\n" + outText + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
                     ai2Msgs.put(sr);
-                    if (!output.isEmpty()) {
-                        Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<shell_output>\n" + output + "\n</shell_output>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
-                    }
-                    Map ctxSo = new HashMap(); ctxSo.put("role", "system"); ctxSo.put("content", "<cmd_result>\n# 命令: " + cmd + "\n# 结果: " + output + "\n</cmd_result>"); ctxSo.put("_ts", System.currentTimeMillis()); ctx.add(ctxSo);
-                    shellCalls.add(outText);
+                    // 工具结果用标准 role:tool 存 ctx
+                    addToContextTC(ctx, "tool", output, null, null, tcid);
                     if (output.startsWith("[延时 ")) {
                         addToContext(ctx, "assistant", "好的，延时任务已创建", null);
                         hasSentReply = true;
                         sendMsg(peerUin, "[AI] 延时任务已创建，到点自动执行", chatType);
+                    } else {
+                        shellCalls.add(outText);
                     }
                 }
             }
-            else if (fn.equals("call_skill")) skillCalls.add(tc);
             else if (fn.equals("toggle_listen")) {
                 boolean enable = getToolArg(tc, "enable").equals("true");
                 String key = peerUin + "_" + chatType;
@@ -1540,7 +1558,7 @@ dumpMsgs.put(dj);
                                 try { Thread.sleep(150); } catch (Exception ignored) { }
                             }
                         }
-                        addToContext(ctx, "assistant", r2c, null);
+                        addToContextTC(ctx, "assistant", r2c, null, sr2tc, null);
                     }
                 }
                 break;
@@ -1563,7 +1581,7 @@ dumpMsgs.put(dj);
                             try { Thread.sleep(150); } catch (Exception ignored) { }
                         }
                     }
-                    addToContext(ctx, "assistant", r2c, null);
+                    addToContextTC(ctx, "assistant", r2c, null, sr2tc, null);
                 } else if (!hasSentReply) {
                     // AI 返回空内容，静默跳过（shell 模式下正常）
                     hasSentReply = true;
@@ -1580,13 +1598,16 @@ dumpMsgs.put(dj);
                             boolean q = (Boolean) qr2.get("quiet");
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
                             if (!q && !out.isEmpty()) {
+                                String rtcid = rtc.getJSONObject("function").optString("id", "rcall_" + System.currentTimeMillis());
                                 JSONObject srm = new JSONObject();
-                                srm.put("role", "system");
-                                String outNote = out.isEmpty() ? "(无输出)" : out;
-                                srm.put("content", "<shell_output>\n" + outNote + "\n</shell_output>\n继续基于以上输出处理。如果需要发送消息给用户，必须使用 > /dev/out 重定向。");
+                                srm.put("role", "tool");
+                                srm.put("tool_call_id", rtcid);
+                                srm.put("content", "<shell_output>\n" + out + "\n</shell_output>\n继续基于以上输出处理。如果需要发送消息给用户，必须使用 > /dev/out 重定向。");
                                 ai2Msgs.put(srm);
-                                Map ctxCr = new HashMap(); ctxCr.put("role", "system"); ctxCr.put("content", "<cmd_result>\n# 命令: " + scmd + "\n# 结果: " + out + "\n</cmd_result>"); ctxCr.put("_ts", System.currentTimeMillis()); ctx.add(ctxCr);
-                                shellCalls.add(out);
+                                if (!out.startsWith("[延时 ")) {
+                                    addToContextTC(ctx, "tool", out, null, null, rtcid);
+                                    shellCalls.add(out);
+                                }
                             }
                         }
                     }
@@ -3132,12 +3153,25 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             }
             int oldW = 1; String origSubject = senderUin;
             Cursor c = null;
-            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String s = c.getString(1); if (s != null && !s.isEmpty()) origSubject = s; } } catch (Exception e) { }
+            try {
+                c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)});
+                if (c.moveToFirst()) {
+                    oldW = c.getInt(0);
+                    String s = c.getString(1);
+                    if (s != null && !s.isEmpty()) origSubject = s;
+                }
+            } catch (Exception e) { }
             finally { if (c != null) c.close(); }
             deleteMemoryById(id, senderUin, userRole);
             storeMemory(senderUin, content, tags, "private", origSubject);
             Cursor last = null;
-            try { last = getDb().rawQuery("SELECT id FROM memories WHERE uin=? AND scope='private' ORDER BY id DESC LIMIT 1", new String[]{senderUin}); if (last.moveToFirst()) { long lastId = last.getLong(0); getDb().execSQL("UPDATE memories SET weight=? WHERE id=?", new Object[]{oldW + 1, lastId}); } } catch (Exception e) { }
+            try {
+                last = getDb().rawQuery("SELECT id FROM memories WHERE uin=? AND scope='private' ORDER BY id DESC LIMIT 1", new String[]{senderUin});
+                if (last.moveToFirst()) {
+                    long lastId = last.getLong(0);
+                    getDb().execSQL("UPDATE memories SET weight=? WHERE id=?", new Object[]{oldW + 1, lastId});
+                }
+            } catch (Exception e) { }
             finally { if (last != null) last.close(); }
         } else if (fname.equals("overwrite_public_memory")) {
             int id = getToolArgInt(tc, "id"); String content = getToolArg(tc, "content"); String tags = getToolArg(tc, "tags");
@@ -3146,12 +3180,25 @@ void executeMemoryCall(JSONObject tc, String fname, String senderUin, String use
             }
             int oldW = 1; String origSubject = senderUin;
             Cursor c = null;
-            try { c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)}); if (c.moveToFirst()) { oldW = c.getInt(0); String s = c.getString(1); if (s != null && !s.isEmpty()) origSubject = s; } } catch (Exception e) { }
+            try {
+                c = getDb().rawQuery("SELECT weight, subject_uin FROM memories WHERE id=?", new String[]{String.valueOf(id)});
+                if (c.moveToFirst()) {
+                    oldW = c.getInt(0);
+                    String s = c.getString(1);
+                    if (s != null && !s.isEmpty()) origSubject = s;
+                }
+            } catch (Exception e) { }
             finally { if (c != null) c.close(); }
             deleteMemoryById(id, senderUin, userRole);
             storeMemory(senderUin, content, tags, "public", origSubject);
             Cursor last = null;
-            try { last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null); if (last.moveToFirst()) { int lastId = last.getInt(0); getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId); } } catch (Exception e) { }
+            try {
+                last = getDb().rawQuery("SELECT id FROM memories WHERE scope='public' ORDER BY id DESC LIMIT 1", null);
+                if (last.moveToFirst()) {
+                    int lastId = last.getInt(0);
+                    getDb().execSQL("UPDATE memories SET weight=" + (oldW + 1) + " WHERE id=" + lastId);
+                }
+            } catch (Exception e) { }
             finally { if (last != null) last.close(); }
         } else if (fname.equals("delete_memory")) { int id = getToolArgInt(tc, "id"); if (id > 0) deleteMemoryById(id, senderUin, userRole); }
     } catch (Exception e) { this.log("error.txt", "execMem: " + e.getMessage()); }
@@ -3217,7 +3264,15 @@ void handleAiMemory(Object msg, String args) {
         String kw = parts[1];
         List found = kw.startsWith("tag:") ? searchMemoriesByTag(senderUin, kw.substring(4)) : searchMemories(senderUin, kw);
         if (found.isEmpty()) sendStyledHeader(msg, "INFO", "没有匹配 \"" + kw + "\"");
-        else { StringBuilder sb = new StringBuilder(); sb.append("[搜索 \"").append(kw).append("\"] ").append(found.size()).append(" 条:\n"); for (int i = 0; i < found.size(); i++) { Map m = (Map) found.get(i); sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n"); } sendStyledHeader(msg, "INFO", sb.toString()); }
+        else {
+            StringBuilder sb = new StringBuilder();
+            sb.append("[搜索 \"").append(kw).append("\"] ").append(found.size()).append(" 条:\n");
+            for (int i = 0; i < found.size(); i++) {
+                Map m = (Map) found.get(i);
+                sb.append("#").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
+            }
+            sendStyledHeader(msg, "INFO", sb.toString());
+        }
         return;
     }
     if (sub.equals("set")) {
@@ -3426,7 +3481,9 @@ void handleAiSet(Object msg, String args) {
     String[] vk = { "api_key","model","ai_url","context_ttl","context_limit","search_provider","search_api_key","show_stats","debug","ai_prefix","shell_rounds","temperature","pat_wake","sewarden" };
     boolean valid = false; for (int i = 0; i < vk.length; i++) if (vk[i].equals(key)) { valid = true; break; }
     if (!valid) { sendStyledHeader(msg, "ERROR", "无效: " + key); return; }
-    if (key.equals("context_ttl") || key.equals("context_limit") || key.equals("show_stats") || key.equals("debug") || key.equals("pat_wake")) { try { Integer.parseInt(value); } catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是整数"); return; } }
+    if (key.equals("context_ttl") || key.equals("context_limit") || key.equals("show_stats") || key.equals("debug") || key.equals("pat_wake")) {
+        try { Integer.parseInt(value); } catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是整数"); return; }
+    }
     if (key.equals("temperature")) { try { double d = Double.parseDouble(value); if (d < 0 || d > 2) { sendStyledHeader(msg, "ERROR", "temperature 0~2"); return; } } catch (Exception e) { sendStyledHeader(msg, "ERROR", "必须是小数"); return; } }
     Map cfg = loadAiConfig(); cfg.put(key, value); saveAiConfig(cfg);
     sendStyledHeader(msg, "INFO", "已更新: " + key);
@@ -3614,7 +3671,9 @@ public void onMsg(Object msg) {
     }
     String peerUin = String.valueOf(msg.peerUin);
     int chatType = msg.type;
-    String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\"" + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200)) + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
+    String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\""
+        + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200))
+        + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
     vfsPushMsgBus(msgJson);
     String trimmed = text.trim();
     
@@ -3688,9 +3747,19 @@ public void onMsg(Object msg) {
                         Object re = rf.get(el);
                         if (re != null) {
                             String ruin = "";
-                            try { java.lang.reflect.Field sf = re.getClass().getDeclaredField("senderUin"); sf.setAccessible(true); Object su = sf.get(re); if (su != null && !su.toString().isEmpty()) ruin = su.toString(); } catch (Exception ex2) { }
+                            try {
+                                java.lang.reflect.Field sf = re.getClass().getDeclaredField("senderUin");
+                                sf.setAccessible(true);
+                                Object su = sf.get(re);
+                                if (su != null && !su.toString().isEmpty()) ruin = su.toString();
+                            } catch (Exception ex2) { }
                             quotedUin = ruin;
-                            try { java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText"); sf.setAccessible(true); Object src = sf.get(re); if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); } } catch (Exception ex2) { }
+                            try {
+                                java.lang.reflect.Field sf = re.getClass().getDeclaredField("sourceMsgText");
+                                sf.setAccessible(true);
+                                Object src = sf.get(re);
+                                if (src != null && !src.toString().isEmpty()) { quotedText = sewardenClean(src.toString()); }
+                            } catch (Exception ex2) { }
                             break;
                         }
                     }
