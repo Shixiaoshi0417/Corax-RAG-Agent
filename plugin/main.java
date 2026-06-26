@@ -356,7 +356,9 @@ void updateTagPool(String uin, String tagsStr, int delta) {
         db.beginTransaction();
         for (int i = 0; i < tags.length; i++) {
             String t = tags[i].trim().toLowerCase();
-            if (t.isEmpty()) continue;
+            if (t.isEmpty()) {
+                continue; 
+            }
             int curCount = getTagPoolCount(db, uin, t);
             int newCount = Math.max(0, curCount + delta);
             ContentValues cv = new ContentValues();
@@ -401,11 +403,15 @@ void rebuildTagPool(String uin) {
         );
         while (c.moveToNext()) {
             String ts = c.getString(0);
-            if (ts == null || ts.trim().isEmpty()) continue;
+            if (ts == null || ts.trim().isEmpty()) {
+                continue; 
+            }
             String[] tags = ts.split(",");
             for (int i = 0; i < tags.length; i++) {
                 String t = tags[i].trim().toLowerCase();
-                if (t.isEmpty()) continue;
+                if (t.isEmpty()) {
+                    continue; 
+                }
                 ContentValues cv = new ContentValues();
                 int cur = getTagPoolCount(db, uin, t);
                 if (cur == 0) {
@@ -446,11 +452,15 @@ void rebuildPublicTagPool() {
         );
         while (c.moveToNext()) {
             String ts = c.getString(0);
-            if (ts == null || ts.trim().isEmpty()) continue;
+            if (ts == null || ts.trim().isEmpty()) {
+                continue; 
+            }
             String[] tags = ts.split(",");
             for (int i = 0; i < tags.length; i++) {
                 String t = tags[i].trim().toLowerCase();
-                if (t.isEmpty()) continue;
+                if (t.isEmpty()) {
+                    continue; 
+                }
                 ContentValues cv = new ContentValues();
                 int cur = getTagPoolCount(db, "PUBLIC", t);
                 if (cur == 0) {
@@ -801,7 +811,9 @@ String buildStrataContext(String senderUin) {
         for (int i = 0; i < privAll.size() && count < topN; i++) {
             Map m = (Map) privAll.get(i);
             int pinned = (Integer) m.get("pinned");
-            if (pinned == 1 && seenPinned.contains(m.get("id"))) continue;
+            if (pinned == 1 && seenPinned.contains(m.get("id"))) {
+                continue; 
+            }
             count++;
             ctx.append("#M").append(m.get("id")).append(" ").append(m.get("content")).append("\n");
             String tags = (String) m.get("tags");
@@ -880,7 +892,9 @@ String buildPublicStrata() {
         for (int i = 0; i < pubAll.size() && count < topN; i++) {
             Map pm = (Map) pubAll.get(i);
             int pinned = (Integer) pm.get("pinned");
-            if (pinned == 1 && seenPinned.contains(pm.get("id"))) continue;
+            if (pinned == 1 && seenPinned.contains(pm.get("id"))) {
+                continue; 
+            }
             count++;
             int cred = (Integer) pm.get("credibility");
             String ru = (String) pm.get("record_uin");
@@ -905,7 +919,9 @@ String buildPublicStrata() {
             if (!hotTags.contains(tag.toLowerCase())) {
                 if (ct > 0) cold.append(", ");
                 cold.append(tag);
-                if (++ct >= 15) break;
+                if (++ct >= 15) {
+                    break; 
+                }
             }
         }
         if (cold.length() > 0) ctx.append("<public_coldtags>").append(cold.toString()).append("</public_coldtags> 查公有信息用 search_public_by_tag。\n");
@@ -1327,7 +1343,9 @@ dumpMsgs.put(dj);
             StringBuilder atSb = new StringBuilder();
             for (int ai = 0; ai < msg.atList.size(); ai++) {
                 String atUin = String.valueOf(msg.atList.get(ai));
-                if (atUin.equals(myUin)) continue;
+                if (atUin.equals(myUin)) {
+                    continue; 
+                }
                 atSb.append("@").append(getMemberName(chatType, peerUin, atUin)).append("(UIN:").append(atUin).append(") ");
             }
             if (atSb.length() > 0) atInfo = "目标: " + atSb.toString();
@@ -1497,7 +1515,9 @@ dumpMsgs.put(dj);
             String fn = tc.getJSONObject("function").getString("name");
             if (fn.equals("shell")) {
                 String cmd = getToolArg(tc, "cmd");
-                if (cmd.isEmpty()) continue;
+                if (cmd.isEmpty()) {
+                    continue; 
+                }
                 Map qr = stripQuietFlag(cmd);
                 cmd = (String) qr.get("cmd");
                 boolean quiet = (Boolean) qr.get("quiet");
@@ -1702,7 +1722,9 @@ Map loadAiConfig() {
             String line;
             while ((line = br.readLine()) != null) {
                 line = line.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
+                if (line.isEmpty() || line.startsWith("#")) {
+                    continue; 
+                }
                 int eq = line.indexOf("=");
                 if (eq > 0) cfg.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
             }
@@ -2141,7 +2163,9 @@ String tavilyExtract(String[] urls, int maxLen) {
         for (int i = 0; i < results.length(); i++) {
             JSONObject r = results.getJSONObject(i);
             String raw = r.optString("raw_content", "");
-            if (raw.isEmpty()) continue;
+            if (raw.isEmpty()) {
+                continue; 
+            }
             if (multi) out.append("【").append(r.optString("url", "")).append("】\n");
             out.append(raw).append("\n");
         }
@@ -2171,7 +2195,9 @@ String doFetchPage(String urlStr) {
     int budget = multi ? 6000 / urls.length : 6000;
     StringBuilder out = new StringBuilder();
     for (int i = 0; i < urls.length; i++) {
-        if (urls[i].isEmpty()) continue;
+        if (urls[i].isEmpty()) {
+            continue; 
+        }
         String c = fetchWebContentSimple(urls[i], budget);
         if (multi) out.append("【").append(urls[i]).append("】\n");
         out.append(c).append("\n");
@@ -2399,7 +2425,9 @@ String vfsWritePromptActive(String content) {
     if (!found) {
         return "[人设不存在: " + target + "]";
     }
-    if (target.equals(getActivePersona())) return null; // 已是当前，无需切换
+    if (target.equals(getActivePersona())) {
+        return null;
+    }
     setActivePersona(target);
     return null;
 }
@@ -2659,7 +2687,9 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
         // 空白跳过
         if (c == ' ' || c == '\t') { pos++; continue; }
         // 注释
-        if (c == '#') break;
+        if (c == '#') {
+            break; 
+        }
         // 后台
         if (c == '&' && pos == line.length() - 1) { tokens.add("&"); break; }
         if (c == '&' && pos + 1 < line.length() && line.charAt(pos + 1) == '&') { tokens.add("&&"); pos += 2; continue; }
@@ -2836,7 +2866,9 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
         String outRedir = null; boolean outAppend = false; String inRedir = null;
         while (idx[0] < tokens.size()) {
             String t = (String) tokens.get(idx[0]);
-            if (t.equals("|") || t.equals(";") || t.equals("&&") || t.equals("||")) break;
+            if (t.equals("|") || t.equals(";") || t.equals("&&") || t.equals("||")) {
+                break; 
+            }
             if (t.equals(">")) { idx[0]++; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
             if (t.equals(">>")) { idx[0]++; outAppend = true; if (idx[0] < tokens.size()) outRedir = (String) tokens.get(idx[0]++); continue; }
             if (t.equals("<")) { idx[0]++; if (idx[0] < tokens.size()) inRedir = (String) tokens.get(idx[0]++); continue; }
@@ -2844,7 +2876,9 @@ String parsePipeline(List tokens, int[] idx, String stdin, String senderUin, Str
             idx[0]++;
         }
 
-        if (cmdArgs.isEmpty()) break;
+        if (cmdArgs.isEmpty()) {
+            break; 
+        }
 
         // 输入重定向
         if (inRedir != null) pipeIn = vfsRead(inRedir, senderUin, peerUin, chatType);
@@ -3143,7 +3177,9 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             StringBuilder sb = new StringBuilder();
             for (int ei = 0; ei < entries.length; ei++) {
                 String e = entries[ei].trim();
-                if (e.isEmpty()) continue;
+                if (e.isEmpty()) {
+                    continue; 
+                }
                 if (pattern.equals("*") || e.contains(pattern.replace("*", ""))) sb.append(dir).append(dir.endsWith("/") ? "" : "/").append(e).append("\n");
             }
             return sb.toString().trim();
@@ -3173,7 +3209,9 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             String[] lines = stdin.split("\n");
             StringBuilder sb = new StringBuilder();
             for (int li = 0; li < lines.length; li++) {
-                if (lines[li].trim().isEmpty()) continue;
+                if (lines[li].trim().isEmpty()) {
+                    continue; 
+                }
                 String[] parts = delim.equals("\t") ? lines[li].split("\t") : lines[li].split(delim);
                 if (field > 0 && field <= parts.length) sb.append(parts[field - 1]).append("\n");
             }
@@ -3337,7 +3375,9 @@ void handleAiMemory(Object msg, String args) {
                 Map.Entry en = (Map.Entry) e;
                 if (c > 0) sb2.append(", "); 
                 sb2.append(en.getKey()).append("(").append(en.getValue()).append(")"); 
-                if (++c >= 15) break; 
+                if (++c >= 15) {
+                    break; 
+                }
             } 
         }
         if (!pub.isEmpty()) {
@@ -3750,7 +3790,9 @@ public void onMsg(Object msg) {
     int sent = 0;
     while (!daemonOutQueue.isEmpty() && sent < 3) {
         String item = (String) daemonOutQueue.remove(0);
-        if (!sentCache.add(item)) continue; // 去重
+        if (!sentCache.add(item)) {
+            continue; // 去重
+        }
         String[] parts = item.split("\\|", 3);
         if (parts.length == 3) {
             String outMsg = "[Output] " + parts[2];
