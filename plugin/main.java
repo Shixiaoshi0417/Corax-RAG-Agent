@@ -1267,6 +1267,8 @@ void handleAi(Object msg, String prompt) {
         }
     } catch (Exception ignored) { }
 
+    getDb(); List ctx = getAiContext(peerUin, chatType);
+
     if (trimmed.equals("listen") || trimmed.equals("listen on") || trimmed.equals("listen off") || trimmed.equals("listen status")) {
         if (!userRole.equals("ADMIN") && !userRole.equals("OWNER")) { sendPermissionDenied(msg); return; }
         String key = peerUin + "_" + chatType;
@@ -1310,7 +1312,6 @@ void handleAi(Object msg, String prompt) {
     if (((String) cfg.get("api_key")).isEmpty()) {
         sendStyledHeader(msg, "ERROR", "AI 未启用"); aiProcessing = false; return;
     }
-    getDb(); List ctx = getAiContext(peerUin, chatType);
 
     if (trimmed.equals("dumpctx")) {
         if (!userRole.equals("OWNER") && !userRole.equals("ADMIN")) { sendPermissionDenied(msg); return; }
