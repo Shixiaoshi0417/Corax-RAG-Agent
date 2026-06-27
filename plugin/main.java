@@ -936,7 +936,7 @@ JSONArray buildAI2Tools() {
     t.put("type", "function");
     JSONObject f = new JSONObject();
     f.put("name", "shell");
-    f.put("description", "Corax OS Shell。执行 Linux 风格命令。支持管道(|) 重定向(>) 后台(&)。run corax-help for available commands. 输出结果将自动返回给你。添加 --quiet 标记可以静默执行。");
+    f.put("description", "Corax OS Shell。执行 Linux 风格命令。支持管道(|) 重定向(>) 后台(&)。run corax-help for available commands. 输出结果将自动返回给你。");
     f.put("parameters", new JSONObject(
         "{\"type\":\"object\",\"properties\":{\"cmd\":{\"type\":\"string\",\"description\":\"要执行的shell命令\"}},\"required\":[\"cmd\"]}"));
     t.put("function", f);
@@ -1555,10 +1555,9 @@ dumpMsgs.put(dj);
                 }
                 Map qr = stripQuietFlag(cmd);
                 cmd = (String) qr.get("cmd");
-                boolean quiet = (Boolean) qr.get("quiet");
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
-                if (!quiet) {
+                {
                     String tcid = tc.optString("id", "call_" + System.currentTimeMillis());
                     JSONObject sr = new JSONObject();
                     if (output.isEmpty()) {
@@ -1672,9 +1671,8 @@ dumpMsgs.put(dj);
                         if (!scmd.isEmpty()) {
                             Map qr2 = stripQuietFlag(scmd);
                             scmd = (String) qr2.get("cmd");
-                            boolean q = (Boolean) qr2.get("quiet");
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
-                            if (!q && !out.isEmpty()) {
+                            if (!out.isEmpty()) {
                                 String rtcid = rtc.optString("id", "rcall_" + System.currentTimeMillis());
                                 JSONObject srm = new JSONObject();
                                 srm.put("role", "tool");
