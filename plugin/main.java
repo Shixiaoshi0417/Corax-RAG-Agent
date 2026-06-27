@@ -1217,7 +1217,8 @@ void handleAi(Object msg, String prompt) {
         sendStyledHeader(msg, "INFO", "当前会话: AI " + (en.contains(peerUin + "_" + chatType) ? "已启用" : "未启用")); return;
     }
     if (!readStringSet(pluginPath + "/config/enabled_conversations.txt").contains(peerUin + "_" + chatType)) {
-        if (debug) { sendStyledHeader(msg, "INFO", "AI 未启用，发送 /ai on 启用"); return; }
+        // AI off: 只有 /ai on 生效，其余全部忽略
+        return;
     }
     if (!canUseAi(senderUin)) {
         sendStyledHeader(msg, "ERROR", "没有 AI 权限"); return;
