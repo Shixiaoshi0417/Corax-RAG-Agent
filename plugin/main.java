@@ -2326,7 +2326,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen stat corax-help";
+        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-reboot stat corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -3161,6 +3161,18 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             }
             return "用法: corax-listen <on|off|status>";
         }
+        if (cmd.equals("corax-reboot")) {
+            if (args.length < 1) {
+                return "用法: corax-reboot <人设名称>";
+            }
+            String target = args[0];
+            File tf = new File(pluginPath + "/config/prompt/" + target + ".prompt.txt");
+            if (!tf.exists()) {
+                return "人设 \"" + target + "\" 不存在";
+            }
+            setActivePersona(target);
+            return "已切换至: " + target + "（上下文已保留，新人设将在下条消息生效）";
+        }
         if (cmd.equals("stat")) {
             if (args.length < 1) {
                 return "用法: stat <路径>";
@@ -3279,7 +3291,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-reboot\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /usr/share/doc/corax/ 了解项目架构";
