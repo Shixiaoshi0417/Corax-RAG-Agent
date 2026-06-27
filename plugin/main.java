@@ -1565,13 +1565,11 @@ dumpMsgs.put(dj);
                         sr.put("tool_call_id", tcid);
                         sr.put("content", "[命令已执行，无输出]");
                         ai2Msgs.put(sr);
-                        addToContextTC(ctx, "tool", "", null, null, tcid);
                     } else {
                         sr.put("role", "tool");
                         sr.put("tool_call_id", tcid);
                         sr.put("content", "<shell_output>\n" + output + "\n</shell_output>\n基于以上 shell 输出继续处理。如需发消息给用户，必须用 > /dev/out 重定向。");
                         ai2Msgs.put(sr);
-                        addToContextTC(ctx, "tool", output, null, null, tcid);
                         if (output.startsWith("[延时 ")) {
                             addToContext(ctx, "assistant", "好的，延时任务已创建", null);
                             hasSentReply = true;
@@ -1680,7 +1678,6 @@ dumpMsgs.put(dj);
                                 srm.put("content", "<shell_output>\n" + out + "\n</shell_output>\n继续基于以上输出处理。如果需要发送消息给用户，必须使用 > /dev/out 重定向。");
                                 ai2Msgs.put(srm);
                                 if (!out.startsWith("[延时 ")) {
-                                    addToContextTC(ctx, "tool", out, null, null, rtcid);
                                     shellCalls.add(out);
                                 }
                             }
