@@ -1675,7 +1675,7 @@ dumpMsgs.put(dj);
                     asstTC2.put("tool_calls", sr2tc);
                     ai2Msgs.put(asstTC2);
                 }
-                if (!r2c.isEmpty()) addToContextTC(ctx, "assistant", r2c, null, sr2tc, null);
+                addToContextTC(ctx, "assistant", r2c != null ? r2c : "", null, sr2tc, null);
                 if (sr2tc != null) for (int i = 0; i < sr2tc.length(); i++) {
                     JSONObject rtc = sr2tc.getJSONObject(i);
                     String rfn = rtc.getJSONObject("function").getString("name");
