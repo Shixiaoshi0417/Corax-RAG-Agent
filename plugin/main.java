@@ -1053,8 +1053,22 @@ void saveCtxToDisk(String peerUin, int chatType) {
 void trimCtx(List ctx) {
     int ctxLimit = 60;
     try { ctxLimit = Integer.parseInt(getAiConfig("context_limit")); } catch (Exception e) { }
-    while (ctx.size() > ctxLimit * 2) {
+    // 按对话轮数截断（一轮 = 用户消息 → AI回复 → 工具调用）
+    int rounds = 0;
+    int keepFrom = 0;
+    for (int i = ctx.size() - 1; i >= 0; i--) {
+        Map m = (Map) ctx.get(i);
+        if ("user".equals(m.get("role"))) {
+            rounds++;
+            if (rounds > ctxLimit) {
+                keepFrom = i + 1;
+                break;
+            }
+        }
+    }
+    while (keepFrom > 0) {
         ctx.remove(0);
+        keepFrom--;
     }
     // 清除开头的孤立 tool 消息（前置 assistant+tool_calls 已被截断）
     while (!ctx.isEmpty()) {
