@@ -3294,7 +3294,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
                 + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-reboot\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
-                + "查阅 /usr/share/doc/corax/ 了解项目架构";
+                + "查阅 /persist/DevDocs.md 了解项目架构";
         }
         return cmd + ": 命令不存在。查看可用命令: corax-help";
     } catch (Exception e) {

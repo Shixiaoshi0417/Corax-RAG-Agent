@@ -1,5 +1,5 @@
 
-# 墨鸦 Strata v4.3.2 — 开发文档
+# 墨鸦 Strata v4.4.0 — 开发文档
 
 ---
 
@@ -325,7 +325,7 @@ CREATE TABLE memories (
 | v4.0 | 全尖括号标签 + name 纯 UIN + 监听只记录 + 系统概览白盒 |
 | v4.1 | 加入 SEWarden |
 | v4.2 | Tavily 搜索支持 + 可配置搜索轮数 |
-| v4.3.2 | 定时提醒系统(set_reminder/cancel_reminder/list_reminders) + Handler.postDelayed精确定时 + search_memory/search_public_memory 工具 |
+| v4.4.0 | Corax-Shell Workspace: 虚拟文件系统 + 单一shell(cmd)工具 + 消息队列 + daemon后台任务 + /persist持久化 |
 
 ---
 
