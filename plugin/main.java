@@ -1570,6 +1570,7 @@ dumpMsgs.put(dj);
                 cmd = (String) qr.get("cmd");
                 
                 String output = shellExecLine(cmd, senderUin, peerUin, chatType);
+                if (output.isEmpty()) output = "[命令已执行，无输出]";
                 {
                     String tcid = tc.optString("id", "call_" + System.currentTimeMillis());
                     JSONObject sr = new JSONObject();
@@ -1684,7 +1685,8 @@ dumpMsgs.put(dj);
                             Map qr2 = stripQuietFlag(scmd);
                             scmd = (String) qr2.get("cmd");
                             String out = shellExecLine(scmd, senderUin, peerUin, chatType);
-                            if (!out.isEmpty()) {
+                            if (out.isEmpty()) out = "[命令已执行，无输出]";
+                            {
                                 String rtcid = rtc.optString("id", "rcall_" + System.currentTimeMillis());
                                 JSONObject srm = new JSONObject();
                                 srm.put("role", "tool");
