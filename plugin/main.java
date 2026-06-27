@@ -2287,6 +2287,10 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     if (path.startsWith("/proc/") && path.contains("/status")) {
         return vfsReadProcStatus(path);
     }
+    if (path.startsWith("/proc/") && path.contains("/cmd")) {
+        Map job = (Map) delayJobs.get(Integer.parseInt(path.replace("/proc/", "").replace("/cmd", "").trim()));
+        return job != null ? String.valueOf(job.get("cmd")) : "[pid 不存在]";
+    }
     if (path.startsWith("/proc/") && path.contains("/stdout")) {
         return vfsReadProcStdout(path);
     }
@@ -2618,11 +2622,28 @@ String vfsReadProcStatus(String path) {
     try {
         String pidStr = path.replace("/proc/", "").replace("/status", "").trim();
         int pid = Integer.parseInt(pidStr);
+        // 先查 daemon
         Thread t = (Thread) daemons.get(pid);
-        if (t == null) {
-            return "[pid 不存在]";
+        if (t != null) {
+            return t.isAlive() ? "running" : "terminated";
         }
-        return t.isAlive() ? "running" : "terminated";
+        // 再查延时任务
+        Map job = (Map) delayJobs.get(pid);
+        if (job != null) {
+            String st = String.valueOf(job.get("status"));
+            long begin = Long.parseLong(String.valueOf(job.get("begin")));
+            long end = Long.parseLong(String.valueOf(job.get("end")));
+            long now = System.currentTimeMillis();
+            if ("done".equals(st)) {
+                return "done";
+            }
+            if (now >= end) {
+                return "overtime (scheduled: " + (end - begin) / 1000 + "s ago)";
+            }
+            long remain = (end - now) / 1000;
+            return "pending (remain: " + remain + "s, cmd: " + job.get("cmd") + ")";
+        }
+        return "[pid 不存在]";
     } catch (Exception e) { return "[解析失败]"; }
 }
 String vfsReadProcStdout(String path) {
