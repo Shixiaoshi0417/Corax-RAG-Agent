@@ -46,15 +46,15 @@ sewarden = 1（WARDEN增强防护，不建议关闭）
 
 命令概览：
 /ai <内容|debug|status|reboot|memory|forget|off|on|clear|config|set|dumpctx>
-/ai memory <pin|search|set|rm|reset|public|all>
-/ai listen <on|off|status>
+/ai memory <info|pin|search|set|rm|reset|public|all>
+/ai listen <on|off|status|summary>
 /block <@|UID|list>
 /member <@|UID|list>
 /admin <@|UID|list>
 /setdefaultaccount <member|blocked>
 /whoami /help /log
 
-监听模式：群聊开启后静默记录上下文，@AI 或唤醒词触发一次回答。
+监听模式：群聊开启后静默记录上下文，并临时记录监听期群消息；/ai listen summary 可总结后清空，关闭监听也会清空。@AI 或唤醒词触发一次回答。
 
 技术缩写：
 Strata: Stratified Tiered Recall Architecture
