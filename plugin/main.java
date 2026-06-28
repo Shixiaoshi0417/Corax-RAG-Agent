@@ -3265,7 +3265,6 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             String filePath = args[0];
             File f = new File(filePath);
             if (!f.exists()) {
-                // 尝试 /persist/ VFS 映射
                 if (filePath.startsWith("/persist/")) {
                     f = new File(pluginPath + "/shared-space/" + filePath.replace("/persist/", ""));
                 } else if (filePath.startsWith("/var/")) {
@@ -3275,7 +3274,11 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             if (!f.exists()) {
                 return "文件不存在: " + filePath;
             }
-            sendFile(peerUin, f.getAbsolutePath(), chatType);
+            if (onMainThread == 0) {
+                return "[文件发送需在主线程，请稍后重试]";
+            }
+            String absPath = f.getAbsolutePath();
+            sendFile(peerUin, absPath, chatType);
             return "已发送: " + f.getName();
         }
         if (cmd.equals("corax-reboot")) {
