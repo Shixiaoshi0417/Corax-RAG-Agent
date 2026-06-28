@@ -2348,7 +2348,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-reboot stat corax-help";
+        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-sendfile corax-reboot stat corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -3258,6 +3258,26 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             }
             return "用法: corax-listen <on|off|status>";
         }
+        if (cmd.equals("corax-sendfile")) {
+            if (args.length < 1) {
+                return "用法: corax-sendfile <路径>";
+            }
+            String filePath = args[0];
+            File f = new File(filePath);
+            if (!f.exists()) {
+                // 尝试 /persist/ VFS 映射
+                if (filePath.startsWith("/persist/")) {
+                    f = new File(pluginPath + "/shared-space/" + filePath.replace("/persist/", ""));
+                } else if (filePath.startsWith("/var/")) {
+                    f = new File(pluginPath + "/config/" + filePath.replace("/var/", ""));
+                }
+            }
+            if (!f.exists()) {
+                return "文件不存在: " + filePath;
+            }
+            sendFile(peerUin, f.getAbsolutePath(), chatType);
+            return "已发送: " + f.getName();
+        }
         if (cmd.equals("corax-reboot")) {
             if (args.length < 1) {
                 return "用法: corax-reboot <人设名称>";
@@ -3391,7 +3411,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-reboot\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-sendfile corax-reboot\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /persist/DevDocs.md 了解项目架构";
