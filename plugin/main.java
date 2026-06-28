@@ -1448,9 +1448,6 @@ dumpMsgs.put(dj);
     // 私有记忆
     String privStrata = buildStrataContext(senderUin);
     if (!privStrata.isEmpty()) sysCtx.append(privStrata).append("\n");
-    // 技能
-    String skills = loadSkills();
-    if (!skills.isEmpty()) sysCtx.append("=== 可用技能 ===\n").append(skills).append("\n");
 
     // 当前场景
     sysCtx.append(chatType == 2 ? "群聊 群号:" + peerUin : "私聊").append(" 时间:").append(getCurrentTime()).append("\n");
@@ -2348,7 +2345,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-sendfile corax-reboot stat corax-help";
+        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-listen corax-sendfile corax-reboot stat corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -3232,12 +3229,6 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             List results = pub ? searchPublicMemories(kw) : searchMemories(senderUin, kw);
             return formatMemList(results, false);
         }
-        if (cmd.equals("corax-skill")) {
-            if (args.length < 1) {
-                return "用法: corax-skill <skill名称>";
-            }
-            return loadSkillContent(args[0]);
-        }
         if (cmd.equals("corax-listen")) {
             if (args.length < 1) {
                 return "用法: corax-listen <on|off|status>";
@@ -3421,7 +3412,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-sendfile corax-reboot\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-listen corax-sendfile corax-reboot\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /persist/DevDocs.md 了解项目架构";
