@@ -3052,12 +3052,49 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             if (path.equals("-")) {
                 return stdin;
             }
+            // 二进制文件保护
+            if (path.startsWith("/persist/") || path.startsWith("/var/")) {
+                String real = vfsMapEtcPath(path);
+                File f = new File(real);
+                if (f.isFile() && f.length() > 100 * 1024) {
+                    return "文件过大 (" + (f.length() / 1024) + "KB), 禁止读取。使用 corax-sendfile 发送。";
+                }
+                byte[] head = new byte[Math.min((int) f.length(), 512)];
+                if (f.isFile() && f.length() > 0) {
+                    try {
+                        FileInputStream fis = new FileInputStream(f);
+                        fis.read(head);
+                        fis.close();
+                        for (int bi = 0; bi < head.length; bi++) {
+                            if (head[bi] == 0) return "[二进制文件，不可 cat。使用 stat 查看信息]";
+                        }
+                    } catch (Exception e) { return "[读取失败]"; }
+                }
+            }
             return vfsRead(path, senderUin, peerUin, chatType);
         }
         if (cmd.equals("ls")) {
             String path = "/";
             for (int i = 0; i < args.length; i++) {
                 if (!args[i].startsWith("-")) { path = args[i]; break; }
+            }
+            // 只列目录内容或文件信息，不读文件内容
+            if (path.startsWith("/persist/") || path.startsWith("/var/") || path.startsWith("/etc/")) {
+                String real = vfsMapEtcPath(path);
+                File f = new File(real);
+                if (f.isDirectory()) {
+                    String[] files = f.list();
+                    if (files == null || files.length == 0) return "(空)";
+                    StringBuilder sb = new StringBuilder();
+                    for (int fi = 0; fi < files.length; fi++) sb.append(files[fi]).append("\n");
+                    return sb.toString().trim();
+                }
+                if (f.isFile()) {
+                    long size = f.length();
+                    if (size > 1024 * 1024) return "文件太大，无法预览 (" + (size / 1024 / 1024) + "MB)";
+                    return f.getName() + " (" + size + " bytes)";
+                }
+                return "(文件不存在)";
             }
             return vfsRead(path, senderUin, peerUin, chatType);
         }
