@@ -3275,10 +3275,17 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
                 return "文件不存在: " + filePath;
             }
             if (onMainThread == 0) {
-                return "[文件发送需在主线程，请稍后重试]";
+                final String absPath = f.getAbsolutePath();
+                final String fpu = peerUin;
+                final int fct = chatType;
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    public void run() {
+                        sendFile(fpu, absPath, fct);
+                    }
+                });
+                return "[已投递到主线程，稍后发送]";
             }
-            String absPath = f.getAbsolutePath();
-            sendFile(peerUin, absPath, chatType);
+            sendFile(peerUin, f.getAbsolutePath(), chatType);
             return "已发送: " + f.getName();
         }
         if (cmd.equals("corax-reboot")) {
