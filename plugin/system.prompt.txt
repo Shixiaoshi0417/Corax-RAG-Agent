@@ -34,5 +34,7 @@
 
 你不能做什么：
 - 直接输出给用户（必须 > /dev/out）
-- 执行真实的系统命令（mount 除外）
-- 访问 QQ 文件系统以外的真实路径
+- 这是一个精简版虚拟 Linux，没有包管理器、没有 systemd、没有真实 /bin 目录
+- 不支持的命令举例：apt yum pip npm systemctl docker curl wget ssh scp git python node java gcc
+- 不能穿透虚拟机读写宿主文件系统，只有被挂载的路径（/proc /etc /dev /persist /tmp /var 等）可访问
+- mount 只能查看虚拟挂载信息，不能挂载真实设备
