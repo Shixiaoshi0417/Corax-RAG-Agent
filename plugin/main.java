@@ -2619,22 +2619,20 @@ String vfsReadVarLog(String path) {
 }
 
 // ======= /dev/ =======
-// 消息总线 — 按会话隔离，由 onMsg 注入
-static Map msgBus = java.util.Collections.synchronizedMap(new HashMap());
+// 消息总线 — 全局，AI 作为系统级 daemon 可跨群感知消息流
+static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
 static int onMainThread = 0;
 static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
 static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList());
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
-        String sessionKey = peerUin + "_" + chatType;
-        List bus = (List) msgBus.get(sessionKey);
-        if (bus == null || bus.isEmpty()) {
+        if (msgBus.isEmpty()) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        synchronized (bus) {
-            for (int i = 0; i < bus.size(); i++) sb.append(bus.get(i)).append("\n");
-            bus.clear();
+        synchronized (msgBus) {
+            for (int i = 0; i < msgBus.size(); i++) sb.append(msgBus.get(i)).append("\n");
+            msgBus.clear();
         }
         return sb.toString().trim();
     }
@@ -3600,16 +3598,9 @@ String formatMemList(List results, boolean isPublic) {
 }
 
 // 消息总线注入 — onMsg 调用
-// 消息总线注入 — onMsg 调用，按会话隔离
 void vfsPushMsgBus(String msgJson, String peerUin, int chatType) {
-    String sessionKey = peerUin + "_" + chatType;
-    List bus = (List) msgBus.get(sessionKey);
-    if (bus == null) {
-        bus = java.util.Collections.synchronizedList(new ArrayList());
-        msgBus.put(sessionKey, bus);
-    }
-    bus.add(msgJson);
-    if (bus.size() > 100) bus.remove(0);
+    msgBus.add(msgJson);
+    if (msgBus.size() > 100) msgBus.remove(0);
 }
 
 
@@ -3655,7 +3646,9 @@ void clearListenLog(String peerUin, int chatType) {
 }
 
 void appendListenLog(String peerUin, int chatType, String senderUin, String senderName, String text, String quotedUin, String quotedText, String quotedMsgId, String msgId) {
-    if (chatType != 2) return;
+    if (chatType != 2) {
+        return;
+    }
     try {
         JSONObject o = new JSONObject();
         o.put("time", getCurrentTime());
