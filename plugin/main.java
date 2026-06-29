@@ -2358,38 +2358,21 @@ void handleOperationApproval(Object msg, boolean permit) {
         sendStyledHeader(msg, "INFO", "没有待审批的操作");
         return;
     }
+    // 取消超时定时器
     Timer atm = (Timer) aop.get("timer");
     if (atm != null) {
         try { atm.cancel(); } catch (Exception e) { }
+        aop.put("timer", null);
     }
-    pendingApprovals.remove(akey);
-    String adesc = (String) aop.get("desc");
-    if (permit) {
-        String avpath = (String) aop.get("vpath");
-        int aidx = Integer.parseInt(String.valueOf(aop.get("idx")));
-        File adir = new File(snapDir(avpath));
-        String[] afiles = adir.list();
-        String atarget = null;
-        if (afiles != null) {
-            for (int ai = 0; ai < afiles.length; ai++) {
-                if (afiles[ai].startsWith(aidx + "_")) {
-                    atarget = afiles[ai];
-                    break;
-                }
-            }
+    // 设结果并唤醒阻塞的 corax-snapshot-rm
+    aop.put("result", permit ? "permit" : "reject");
+    Object lock = aop.get("lock");
+    if (lock != null) {
+        synchronized (lock) {
+            lock.notifyAll();
         }
-        if (atarget != null) {
-            new File(adir, atarget).delete();
-            injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被批准并执行");
-            sendStyledHeader(msg, "SUCCESS", "已删除快照 " + adesc);
-        } else {
-            injectApprovalResult(apu, act, "删除快照 " + adesc + " 批准但快照已不存在");
-            sendStyledHeader(msg, "ERROR", "快照已被删除");
-        }
-    } else {
-        injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被拒绝");
-        sendStyledHeader(msg, "INFO", "已拒绝");
     }
+    sendStyledHeader(msg, "INFO", permit ? "已批准" : "已拒绝");
 }
 
 // ==================== 联网搜索 ====================
@@ -4266,41 +4249,78 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
                     try { oldTm.cancel(); } catch (Exception ex) { }
                 }
             }
-            Map rmOp = new HashMap();
+            final Map rmOp = new HashMap();
             rmOp.put("type", "snapshot-delete");
             rmOp.put("vpath", rmPath);
             rmOp.put("idx", String.valueOf(rmIdx));
             rmOp.put("desc", rmDesc);
             rmOp.put("appId", appId);
-            // 30s 超时定时器
-            final String fPu = peerUin;
-            final int fCt = chatType;
-            final String fKey = appKey;
-            final int fAppId = appId;
-            final String fDesc = rmDesc;
+            rmOp.put("result", null);
+            final Object lock = new Object();
+            rmOp.put("lock", lock);
+            // 30s 超时定时器（Timer 线程，不走 Handler.post）
             Timer rmTm = new Timer(true);
             rmTm.schedule(new TimerTask() {
                 public void run() {
-                    new Handler(Looper.getMainLooper()).post(new Runnable() {
-                        public void run() {
-                            onMainThread++;
-                            try {
-                                Map op2 = (Map) pendingApprovals.get(fKey);
-                                if (op2 != null && "snapshot-delete".equals(op2.get("type"))
-                                    && Integer.parseInt(String.valueOf(op2.get("appId"))) == fAppId) {
-                                    pendingApprovals.remove(fKey);
-                                    injectApprovalResult(fPu, fCt, "删除快照 " + fDesc + " 请求超时，已自动拒绝");
-                                }
-                            } catch (Exception e) { }
-                            finally { onMainThread--; }
+                    synchronized (lock) {
+                        Map op2 = (Map) pendingApprovals.get(appKey);
+                        if (op2 != null && Integer.parseInt(String.valueOf(op2.get("appId"))) == appId) {
+                            op2.put("result", "timeout");
+                            op2.put("timer", null);
                         }
-                    });
+                        lock.notifyAll();
+                    }
                 }
             }, 30000);
             rmOp.put("timer", rmTm);
             pendingApprovals.put(appKey, rmOp);
             sendMsg(peerUin, "[Corax-Shell] 请求删除快照 " + rmDesc + "，是否批准？发送 /ai operation permit 或 /ai operation reject", chatType);
-            return "";
+            // 阻塞等待审批结果（审批通过 onMsg 在其他线程唤醒）
+            synchronized (lock) {
+                try {
+                    lock.wait(30000);
+                } catch (InterruptedException e) { }
+            }
+            // 取出结果并执行
+            Map finalOp = (Map) pendingApprovals.remove(appKey);
+            String finalResult = "timeout";
+            if (finalOp != null) {
+                String fr = (String) finalOp.get("result");
+                if (fr != null) {
+                    finalResult = fr;
+                }
+                Timer ft = (Timer) finalOp.get("timer");
+                if (ft != null) {
+                    try { ft.cancel(); } catch (Exception ex) { }
+                }
+            }
+            if ("permit".equals(finalResult)) {
+                File delDir = new File(snapDir(rmPath));
+                String[] delFiles = delDir.list();
+                String delTarget = null;
+                if (delFiles != null) {
+                    for (int di = 0; di < delFiles.length; di++) {
+                        if (delFiles[di].startsWith(rmIdx + "_")) {
+                            delTarget = delFiles[di];
+                            break;
+                        }
+                    }
+                }
+                if (delTarget != null) {
+                    new File(delDir, delTarget).delete();
+                    injectApprovalResult(peerUin, chatType, "删除快照 " + rmDesc + " 已被批准并执行");
+                    return "快照 " + rmDesc + " 已被管理员批准并删除";
+                } else {
+                    injectApprovalResult(peerUin, chatType, "删除快照 " + rmDesc + " 批准但快照已不存在");
+                    return "快照批准但快照已不存在: " + rmDesc;
+                }
+            } else if ("reject".equals(finalResult)) {
+                injectApprovalResult(peerUin, chatType, "删除快照 " + rmDesc + " 已被拒绝");
+                return "快照 " + rmDesc + " 已被管理员拒绝";
+            } else {
+                injectApprovalResult(peerUin, chatType, "删除快照 " + rmDesc + " 请求超时，已自动拒绝");
+                return "快照 " + rmDesc + " 审批超时，已自动拒绝";
+            }
         }
         if (cmd.equals("stat")) {
             if (args.length < 1) {
