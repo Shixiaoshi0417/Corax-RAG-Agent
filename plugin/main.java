@@ -1216,6 +1216,18 @@ void trimCtx(List ctx) {
     }
 }
 
+void injectApprovalResult(String peerUin, int chatType, String message) {
+    List ictx = getAiContext(peerUin, chatType);
+    if (ictx == null) {
+        ictx = new ArrayList();
+    }
+    Map m = new HashMap();
+    m.put("role", "system");
+    m.put("content", "<operation-result>" + message + "</operation-result>");
+    m.put("_ts", System.currentTimeMillis());
+    ictx.add(m);
+    saveCtxToDisk(peerUin, chatType);
+}
 void addToContext(List ctx, String role, String content, String name) {
     Map m = new HashMap();
     m.put("role", role); m.put("content", content);
@@ -2329,6 +2341,56 @@ void handleDebug(Object msg, String trimmed) {
         sendStyledHeader(msg, "INFO", "debug = " + dp[1]);
     }
     else { sendStyledHeader(msg, "ERROR", "用法: /ai debug 0/1"); }
+
+void handleOperationApproval(Object msg, boolean permit) {
+    String auin = String.valueOf(msg.userUin);
+    String arole = getRole(auin);
+    if (!arole.equals("ADMIN") && !arole.equals("OWNER")) {
+        sendPermissionDenied(msg);
+        return;
+    }
+    String apu = String.valueOf(msg.peerUin);
+    int act = msg.type;
+    String akey = apu + "_" + act;
+    Map aop = (Map) pendingApprovals.get(akey);
+    if (aop == null) {
+        sendStyledHeader(msg, "INFO", "没有待审批的操作");
+        return;
+    }
+    Timer atm = (Timer) aop.get("timer");
+    if (atm != null) {
+        try { atm.cancel(); } catch (Exception e) { }
+    }
+    pendingApprovals.remove(akey);
+    String adesc = (String) aop.get("desc");
+    if (permit) {
+        String avpath = (String) aop.get("vpath");
+        int aidx = Integer.parseInt(String.valueOf(aop.get("idx")));
+        File adir = new File(snapDir(avpath));
+        String[] afiles = adir.list();
+        String atarget = null;
+        if (afiles != null) {
+            for (int ai = 0; ai < afiles.length; ai++) {
+                if (afiles[ai].startsWith(aidx + "_")) {
+                    atarget = afiles[ai];
+                    break;
+                }
+            }
+        }
+        if (atarget != null) {
+            new File(adir, atarget).delete();
+            injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被批准并执行");
+            sendStyledHeader(msg, "SUCCESS", "已删除快照 " + adesc);
+        } else {
+            injectApprovalResult(apu, act, "删除快照 " + adesc + " 批准但快照已不存在");
+            sendStyledHeader(msg, "ERROR", "快照已被删除");
+        }
+    } else {
+        injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被拒绝");
+        sendStyledHeader(msg, "INFO", "已拒绝");
+    }
+}
+
 }
 // ==================== 联网搜索 ====================
 String doWebSearch(String query) {
@@ -2681,7 +2743,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore stat corax-help";
+        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore corax-snapshot-rm stat corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -2773,6 +2835,10 @@ String vfsWriteProcSys(String path, String content) {
         return "[无效配置键: " + key + "]";
     }
     aiConfigCache = null;
+    String fullErr = snapCheckFull(path);
+    if (fullErr != null) {
+        return fullErr;
+    }
     takeSnapshot(path);
     Map cfg = loadAiConfig(); cfg.put(key, content.trim()); saveAiConfig(cfg);
     return null;
@@ -2869,6 +2935,10 @@ String vfsWriteEtc(String path, String content, boolean append) {
     if (!new File(real).exists()) {
         return "[只读: 系统路径不允许新建文件, 只能修改已有配置]";
     }
+    String fullErr = snapCheckFull(path);
+    if (fullErr != null) {
+        return fullErr;
+    }
     takeSnapshot(path);
     return writeFileString(real, content, append);
 }
@@ -2906,6 +2976,7 @@ static Map msgBus = java.util.Collections.synchronizedMap(new HashMap());
 static int onMainThread = 0;
 static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
 static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList());
+static Map pendingApprovals = new HashMap();
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
         String key = peerUin + "_" + chatType;
@@ -2942,6 +3013,10 @@ String vfsReadPersist(String path) {
     return readFileString(pluginPath + "/shared-space/" + path.replace("/persist/", ""));
 }
 String vfsWritePersist(String path, String content, boolean append) {
+    String fullErr = snapCheckFull(path);
+    if (fullErr != null) {
+        return fullErr;
+    }
     takeSnapshot(path);
     return writeFileString(pluginPath + "/shared-space/" + path.replace("/persist/", ""), content, append);
 }
@@ -3093,6 +3168,10 @@ String vfsWriteVarDb(String sql) {
         catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
     }
     // 写操作：先快照，再执行
+    String fullErr = snapCheckFull("/var/data.db");
+    if (fullErr != null) {
+        return fullErr;
+    }
     takeSnapshot("/var/data.db");
     try {
         getDb().execSQL(sql);
@@ -3239,6 +3318,16 @@ String snapCurrentContent(String vpath) {
     }
     return "";
 }
+String snapCheckFull(String vpath) {
+    File dir = new File(snapDir(vpath));
+    if (dir.exists()) {
+        String[] files = dir.list();
+        if (files != null && files.length >= 10) {
+            return "[快照已满: " + vpath + " 已达 10 个上限，请先 corax-snapshot-rm 删除旧快照]";
+        }
+    }
+    return null;
+}
 void takeSnapshot(String vpath) {
     try {
         String current = snapCurrentContent(vpath);
@@ -3262,22 +3351,6 @@ void takeSnapshot(String vpath) {
             }
             catch (Exception e) {
             }
-            String[] existing = dir.list();
-            if (existing != null && existing.length >= 20) {
-                int minIdx = Integer.MAX_VALUE;
-                String toDel = null;
-                for (int i = 0; i < existing.length; i++) {
-                    int idx = 0;
-                    try { idx = Integer.parseInt(existing[i].split("_")[0]); } catch (Exception e) { }
-                    if (idx < minIdx) {
-                        minIdx = idx;
-                        toDel = existing[i];
-                    }
-                }
-                if (toDel != null) {
-                    new File(dir, toDel).delete();
-                }
-            }
             int idx = snapNextIndex(vpath);
             String ts = getCurrentTime().replace(":", "-").replace(" ", "_");
             long len = src.length();
@@ -3287,22 +3360,6 @@ void takeSnapshot(String vpath) {
             return;
         }
         // 文本快照
-        String[] existing = dir.list();
-        if (existing != null && existing.length >= 20) {
-            int minIdx = Integer.MAX_VALUE;
-            String toDel = null;
-            for (int i = 0; i < existing.length; i++) {
-                int idx = 0;
-                try { idx = Integer.parseInt(existing[i].split("_")[0]); } catch (Exception e) { }
-                if (idx < minIdx) {
-                    minIdx = idx;
-                    toDel = existing[i];
-                }
-            }
-            if (toDel != null) {
-                new File(dir, toDel).delete();
-            }
-        }
         int idx = snapNextIndex(vpath);
         String ts = getCurrentTime().replace(":", "-").replace(" ", "_");
         int len = current.length();
@@ -4337,7 +4394,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v5.0.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore corax-snapshot-rm\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /persist/DevDocs.md 了解项目架构";
@@ -5260,6 +5317,16 @@ public void onMsg(Object msg) {
 
     // SEWarden: 清洗用户输入中的系统标签
     trimmed = sewardenClean(trimmed);
+
+    // 操作审批：允许在 AI 处理中响应，越过 aiProcessing 拦截
+    if (trimmed.equals("/ai operation permit")) {
+        handleOperationApproval(msg, true);
+        return;
+    }
+    if (trimmed.equals("/ai operation reject")) {
+        handleOperationApproval(msg, false);
+        return;
+    }
 
     if (trimmed.startsWith("/ai")) {
         if (aiProcessing) {
