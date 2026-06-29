@@ -2990,6 +2990,39 @@ String writeFileString(String path, String content, boolean append) {
     } catch (Exception e) { return "[写入失败: " + e.getMessage() + "]"; }
 }
 
+void snapCopyFile(File src, File dst) {
+    FileInputStream fis = null;
+    FileOutputStream fos = null;
+    try {
+        fis = new FileInputStream(src);
+        fos = new FileOutputStream(dst);
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = fis.read(buf)) > 0) {
+            fos.write(buf, 0, n);
+        }
+    }
+    catch (Exception e) {
+        this.log("error.txt", "snapCopyFile: " + e.getMessage());
+    }
+    finally {
+        if (fis != null) {
+            try {
+                fis.close();
+            }
+            catch (Exception ignored) {
+            }
+        }
+        if (fos != null) {
+            try {
+                fos.close();
+            }
+            catch (Exception ignored) {
+            }
+        }
+    }
+}
+
 // ==================== 快照系统 ====================
 String snapBaseDir() {
     return pluginPath + "/config/.snapshots";
@@ -3027,7 +3060,7 @@ String snapCurrentContent(String vpath) {
         if (!f.exists()) {
             return "";
         }
-        return "[binary " + f.length() + "B]";
+        return "[snapshot-binary]";
     }
     if (vpath.startsWith("/etc/")) {
         String real = vfsMapEtcPath(vpath);
@@ -3063,9 +3096,44 @@ void takeSnapshot(String vpath) {
         if (!dir.exists()) {
             dir.mkdirs();
         }
+        // 二进制快照：直接复制数据库文件
+        if ("[snapshot-binary]".equals(current)) {
+            File src = new File(pluginPath + "/config/data.db");
+            if (!src.exists()) {
+                return;
+            }
+            try {
+                getDb().execSQL("PRAGMA wal_checkpoint(TRUNCATE)");
+            }
+            catch (Exception e) {
+            }
+            String[] existing = dir.list();
+            if (existing != null && existing.length >= 20) {
+                int minIdx = Integer.MAX_VALUE;
+                String toDel = null;
+                for (int i = 0; i < existing.length; i++) {
+                    int idx = 0;
+                    try { idx = Integer.parseInt(existing[i].split("_")[0]); } catch (Exception e) { }
+                    if (idx < minIdx) {
+                        minIdx = idx;
+                        toDel = existing[i];
+                    }
+                }
+                if (toDel != null) {
+                    new File(dir, toDel).delete();
+                }
+            }
+            int idx = snapNextIndex(vpath);
+            String ts = getCurrentTime().replace(":", "-").replace(" ", "_");
+            long len = src.length();
+            String sizeStr = len >= 1024 ? (len / 1024 + "KB") : (len + "B");
+            String fname = idx + "_" + ts + "_" + sizeStr;
+            snapCopyFile(src, new File(dir, fname));
+            return;
+        }
+        // 文本快照
         String[] existing = dir.list();
         if (existing != null && existing.length >= 20) {
-            // 找到最小的 index 并删除
             int minIdx = Integer.MAX_VALUE;
             String toDel = null;
             for (int i = 0; i < existing.length; i++) {
@@ -3144,10 +3212,14 @@ String restoreSnapshot(String vpath, int snapIdx) {
     }
     // 恢复前先保存当前状态，以防恢复错误可撤销
     takeSnapshot(vpath);
-    String content = readFileString(new File(dir, target).getAbsolutePath());
-    if (content.startsWith("[binary ")) {
-        return "[数据库快照需手动恢复: cp " + dir.getAbsolutePath() + "/" + target + " " + pluginPath + "/config/data.db]";
+    // 二进制快照：直接复制文件
+    if (vpath.startsWith("/var/data.db")) {
+        closeSharedDb();
+        snapCopyFile(new File(dir, target), new File(pluginPath + "/config/data.db"));
+        getDb();
+        return null;
     }
+    String content = readFileString(new File(dir, target).getAbsolutePath());
     if (vpath.startsWith("/etc/")) {
         String real = vfsMapEtcPath(vpath);
         return writeFileString(real, content, false);
