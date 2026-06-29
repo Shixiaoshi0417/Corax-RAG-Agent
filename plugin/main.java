@@ -2636,6 +2636,7 @@ String vfsWriteProcSys(String path, String content) {
     if (!valid) {
         return "[无效配置键: " + key + "]";
     }
+    aiConfigCache = null;
     takeSnapshot(path);
     Map cfg = loadAiConfig(); cfg.put(key, content.trim()); saveAiConfig(cfg);
     return null;
@@ -2893,55 +2894,56 @@ String vfsWriteProcKill(String path) {
 
 // ======= /var/ =======
 String vfsWriteVarDb(String sql) {
-    // 严格白名单：只允许 SELECT 查询，禁止一切写操作
+    // 仅拦截 DROP TABLE / ALTER TABLE，其余操作由快照保护
     String upper = sql.trim().toUpperCase();
-    if (upper.contains("DROP") || upper.contains("ALTER") || upper.contains("ATTACH")
-        || upper.contains("VACUUM") || upper.contains("DELETE") || upper.contains("UPDATE")
-        || upper.contains("INSERT") || upper.contains("REPLACE") || upper.contains("CREATE")
-        || upper.contains("GRANT") || upper.contains("REVOKE") || upper.contains("PRAGMA")
-        || upper.contains("REINDEX") || upper.contains("SAVEPOINT") || upper.contains("RELEASE")
-        || upper.contains("ROLLBACK") || upper.contains("BEGIN") || upper.contains("COMMIT")
-        || upper.contains("TRUNCATE")) {
-        return "[拒绝: 仅允许 SELECT 查询]";
+    if (upper.contains("DROP") || upper.contains("ALTER")) {
+        return "[拒绝: 不允许 DROP/ALTER]";
     }
-    if (!upper.startsWith("SELECT") && !upper.startsWith("EXPLAIN")
-        && !upper.startsWith("WITH") && !upper.startsWith("DESCRIBE")) {
-        return "[拒绝: 仅允许 SELECT 查询]";
-    }
-    try {
-        Cursor c = getDb().rawQuery(sql, null);
-        StringBuilder sb = new StringBuilder();
-        int colCount = c.getColumnCount();
-        for (int i = 0; i < colCount; i++) {
-            if (i > 0) {
-                sb.append(" | ");
-            }
-            sb.append(c.getColumnName(i));
-        }
-        sb.append("\n");
-        for (int i = 0; i < colCount; i++) {
-            if (i > 0) {
-                sb.append("-+-");
-            }
-            sb.append("---");
-        }
-        sb.append("\n");
-        int rowCount = 0;
-        while (c.moveToNext() && rowCount < 50) {
+    // SELECT 查询：只读，无需快照
+    if (upper.startsWith("SELECT") || upper.startsWith("EXPLAIN")
+        || upper.startsWith("WITH") || upper.startsWith("DESCRIBE")) {
+        try {
+            Cursor c = getDb().rawQuery(sql, null);
+            StringBuilder sb = new StringBuilder();
+            int colCount = c.getColumnCount();
             for (int i = 0; i < colCount; i++) {
                 if (i > 0) {
                     sb.append(" | ");
                 }
-                sb.append(c.getString(i) != null ? c.getString(i) : "NULL");
+                sb.append(c.getColumnName(i));
             }
             sb.append("\n");
-            rowCount++;
+            for (int i = 0; i < colCount; i++) {
+                if (i > 0) {
+                    sb.append("-+-");
+                }
+                sb.append("---");
+            }
+            sb.append("\n");
+            int rowCount = 0;
+            while (c.moveToNext() && rowCount < 50) {
+                for (int i = 0; i < colCount; i++) {
+                    if (i > 0) {
+                        sb.append(" | ");
+                    }
+                    sb.append(c.getString(i) != null ? c.getString(i) : "NULL");
+                }
+                sb.append("\n");
+                rowCount++;
+            }
+            if (rowCount >= 50) {
+                sb.append("... (truncated, max 50 rows)\n");
+            }
+            c.close();
+            return sb.toString().isEmpty() ? "(查询结果为空)" : sb.toString().trim();
         }
-        if (rowCount >= 50) {
-            sb.append("... (truncated, max 50 rows)\n");
-        }
-        c.close();
-        return sb.toString().isEmpty() ? "(查询结果为空)" : sb.toString().trim();
+        catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
+    }
+    // 写操作：先快照，再执行
+    takeSnapshot("/var/data.db");
+    try {
+        getDb().execSQL(sql);
+        return null;
     }
     catch (Exception e) { return "[SQL错误: " + e.getMessage() + "]"; }
 }
