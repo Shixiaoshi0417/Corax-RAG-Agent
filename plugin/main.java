@@ -695,14 +695,19 @@ boolean deleteMemoryById(long id, String requesterUin, String requesterRole) {
 }
 
 int deleteMemoriesByKeyword(String uin, String keyword) {
+    SQLiteDatabase db = getDb();
+    Cursor c = null;
     try {
-        Cursor c = getDb().rawQuery(
+        db.beginTransaction();
+        c = db.rawQuery(
             "SELECT tags FROM memories WHERE uin = ? AND scope = 'private' AND content LIKE ?",
             new String[]{uin, "%" + keyword + "%"});
         while (c.moveToNext()) { String tags = c.getString(0); if (tags != null && !tags.trim().isEmpty()) updateTagPool(uin, tags, -1); }
-        c.close();
-        return getDb().delete("memories", "uin = ? AND scope = 'private' AND content LIKE ?", new String[]{uin, "%" + keyword + "%"});
+        int deleted = db.delete("memories", "uin = ? AND scope = 'private' AND content LIKE ?", new String[]{uin, "%" + keyword + "%"});
+        db.setTransactionSuccessful();
+        return deleted;
     } catch (Exception e) { this.log("error.txt", "deleteMemByKw: " + e.getMessage()); return 0; }
+    finally { if (c != null) c.close(); db.endTransaction(); }
 }
 
 List searchMemoriesByTag(String uin, String tag) {
@@ -1307,6 +1312,7 @@ void handleAi(Object msg, String prompt) {
         if (!newPersona.isEmpty()) {
             addToContext(ctx, "system", "现在你需要扮演以下角色，忘记之前的身份设定：\n\n" + newPersona, null);
         }
+        saveCtxToDisk(peerUin, chatType);
         return;
     }
     if (trimmed.equals("debug") || trimmed.startsWith("debug ")) { handleDebug(msg, trimmed); return; }
@@ -2320,8 +2326,8 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
         return vfsReadPersist(path);
     }
     // /src/
-    if (path.equals("/src/main.java")) {
-        return vfsReadSrc();
+    if (path.startsWith("/src/")) {
+        return "[拒绝: 源码不可访问]";
     }
     // /tmp/
     if (path.startsWith("/tmp/")) {
@@ -2529,19 +2535,23 @@ String vfsReadVarLog(String path) {
 }
 
 // ======= /dev/ =======
-// 消息总线 — 只读 FD，由 onMsg 注入
-static List msgBus = java.util.Collections.synchronizedList(new ArrayList());
+// 消息总线 — 按 peerUin_chatType 隔离，每个会话只能读到自己的消息
+static Map msgBus = java.util.Collections.synchronizedMap(new HashMap());
 static int onMainThread = 0;
 static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
 static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList());
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
-        if (msgBus.isEmpty()) {
+        String key = peerUin + "_" + chatType;
+        List list = (List) msgBus.get(key);
+        if (list == null || list.isEmpty()) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < msgBus.size(); i++) sb.append(msgBus.get(i)).append("\n");
-        msgBus.clear();
+        synchronized (list) {
+            for (int i = 0; i < list.size(); i++) sb.append(list.get(i)).append("\n");
+            list.clear();
+        }
         return sb.toString().trim();
     }
     return "[只写设备或不存在]";
@@ -3375,7 +3385,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             if (content.startsWith("src") || content.startsWith("tmp") || content.startsWith("persist")) isDir = true;
             if (content.startsWith("usr")) isDir = true;
             String perms = "/proc/sys/ api_key RO; 其余 RW";
-            if (path.startsWith("/src/")) perms = "RO (源码只读)";
+            if (path.startsWith("/src/")) perms = "-- (拒绝访问)";
             else if (path.startsWith("/proc/")) perms = "部分 RO, 部分 RW";
             else if (path.startsWith("/dev/")) perms = "msg-stream RO, out WO";
             else if (path.startsWith("/ctx/")) perms = "RO (上下文只读)";
@@ -3503,9 +3513,15 @@ String loadSkillContent(String name) {
 }
 
 // 消息总线注入 — onMsg 调用
-void vfsPushMsgBus(String msgJson) {
-    msgBus.add(msgJson);
-    if (msgBus.size() > 100) msgBus.remove(0);
+void vfsPushMsgBus(String msgJson, String peerUin, int chatType) {
+    String key = peerUin + "_" + chatType;
+    List list = (List) msgBus.get(key);
+    if (list == null) {
+        list = java.util.Collections.synchronizedList(new ArrayList());
+        msgBus.put(key, list);
+    }
+    list.add(msgJson);
+    if (list.size() > 100) list.remove(0);
 }
 
 
@@ -4084,7 +4100,7 @@ public void onMsg(Object msg) {
     String msgJson = "{\"from\":\"" + senderUin + "\",\"text\":\""
         + text.replace("\"", "\\\"").replace("\n", " ").substring(0, Math.min(text.length(), 200))
         + "\",\"to\":\"" + peerUin + "\",\"type\":" + chatType + ",\"time\":\"" + getCurrentTime() + "\"}";
-    vfsPushMsgBus(msgJson);
+    vfsPushMsgBus(msgJson, peerUin, chatType);
     String trimmed = text.trim();
     
     // SEWarden: 清洗用户输入中的系统标签
