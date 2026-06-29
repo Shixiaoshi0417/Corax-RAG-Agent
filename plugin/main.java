@@ -2372,7 +2372,14 @@ void handleOperationApproval(Object msg, boolean permit) {
             lock.notifyAll();
         }
     }
-    sendStyledHeader(msg, "INFO", permit ? "已批准" : "已拒绝");
+    // 兜底：如果 lock.wait 不在等（异常情况），直接注入 ctx
+    String adesc = (String) aop.get("desc");
+    if (permit) {
+        injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被批准并执行");
+    } else {
+        injectApprovalResult(apu, act, "删除快照 " + adesc + " 已被拒绝");
+    }
+    sendStyledHeader(msg, "INFO", permit ? "已批准" : "已删除");
 }
 
 // ==================== 联网搜索 ====================
@@ -3407,6 +3414,29 @@ String restoreSnapshot(String vpath, int snapIdx) {
         return "[快照 #" + snapIdx + " 不存在]";
     }
     // 恢复前先保存当前状态，以防恢复错误可撤销
+    // 如果满 10 个，先删最旧的腾空间
+    {
+        File checkDir = new File(snapDir(vpath));
+        if (checkDir.exists()) {
+            String[] checkFiles = checkDir.list();
+            if (checkFiles != null && checkFiles.length >= 10) {
+                // 找最旧的（最小 index）并删除
+                int minIdx = Integer.MAX_VALUE;
+                String toDel = null;
+                for (int ci = 0; ci < checkFiles.length; ci++) {
+                    int cidx = 0;
+                    try { cidx = Integer.parseInt(checkFiles[ci].split("_")[0]); } catch (Exception e) { }
+                    if (cidx < minIdx) {
+                        minIdx = cidx;
+                        toDel = checkFiles[ci];
+                    }
+                }
+                if (toDel != null) {
+                    new File(checkDir, toDel).delete();
+                }
+            }
+        }
+    }
     takeSnapshot(vpath);
     // 二进制快照：直接复制文件
     if (vpath.startsWith("/var/data.db")) {
