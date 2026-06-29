@@ -34,7 +34,6 @@ static long systemPromptFileMtime = 0;
 static List cachedWakeWords = null;
 static long wakeWordsFileMtime = 0;
 
-static String cachedSkills = null;
 static Timer delayTimer = null;
 static boolean aiProcessing = false;
 static Queue msgQueue = new LinkedList();
@@ -45,10 +44,6 @@ static String lastAssistantMsg = null;
 static String quotedUin = "";
 static String patOperatorUin = null;
 static String patPeerUin = null;
-static Map skillContentCache = null;
-static Map skillContentMtime = null;
-static long skillsDirMtime = 0;
-
 // ==================== SQLite ====================
 SQLiteDatabase getDb() {
     if (sharedDb == null || !sharedDb.isOpen()) {
@@ -217,94 +212,6 @@ boolean startsWithWakeWord(String text) {
         }
     }
     return false;
-}
-
-// ==================== Skills ====================
-String loadSkills() {
-    File dir = new File(pluginPath + "/config/skills");
-    if (!dir.exists() || !dir.isDirectory()) {
-        cachedSkills = "";
-        skillsDirMtime = 0;
-        return "";
-    }
-    long latestMtime = 0;
-    File[] files = dir.listFiles(new FilenameFilter() {
-        public boolean accept(File dir, String name) { return name.endsWith(".skill.txt"); }
-    });
-    if (files == null || files.length == 0) {
-        cachedSkills = "";
-        skillsDirMtime = 0;
-        return "";
-    }
-    for (int i = 0; i < files.length; i++) {
-        long mt = files[i].lastModified();
-        if (mt > latestMtime) {
-            latestMtime = mt;
-        }
-    }
-    if (cachedSkills != null && latestMtime == skillsDirMtime) {
-        return cachedSkills;
-    }
-
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < files.length; i++) {
-        String name = files[i].getName();
-        String skillName = name.substring(0, name.length() - ".skill.txt".length());
-        // 只取第一行作为简介
-        try {
-            BufferedReader br = new BufferedReader(new FileReader(files[i]));
-            String firstLine = br.readLine();
-            br.close();
-            String desc = "";
-            if (firstLine != null) {
-                if (firstLine.startsWith("##简介")) {
-                    desc = firstLine.substring("##简介".length()).trim();
-                }
-                    else {
-                        desc = firstLine.trim();
-                    }
-            }
-            if (!desc.isEmpty()) { sb.append(skillName).append(": ").append(desc).append("\n"); }
-        } catch (Exception e) { this.log("error.txt", "loadSkills: " + e.getMessage()); }
-    }
-    cachedSkills = sb.toString().trim();
-    skillsDirMtime = latestMtime;
-    return cachedSkills;
-}
-
-// 加载指定 skill 的完整内容
-String loadSkillContent(String skillName) {
-    File f = new File(pluginPath + "/config/skills/" + skillName + ".skill.txt");
-    if (!f.exists()) {
-        return "";
-    }
-    long mtime = f.lastModified();
-    if (skillContentCache == null) {
-        skillContentCache = new HashMap();
-        skillContentMtime = new HashMap();
-    }
-    Long cachedMtime = (Long) skillContentMtime.get(skillName);
-    if (cachedMtime != null && cachedMtime == mtime) {
-        return (String) skillContentCache.get(skillName);
-    }
-    try {
-        BufferedReader br = new BufferedReader(new FileReader(f));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        boolean first = true;
-        while ((line = br.readLine()) != null) {
-            if (first) {
-                first = false;
-                continue;
-            }
-            sb.append(line).append("\n");
-        }
-        br.close();
-        String content = sb.toString().trim();
-        skillContentCache.put(skillName, content);
-        skillContentMtime.put(skillName, mtime);
-        return content;
-    } catch (Exception e) { return ""; }
 }
 
 // ==================== 默认账户 ====================
@@ -1509,11 +1416,6 @@ void handleAi(Object msg, String prompt) {
         for (int i = 0; i < dumpCtx.size(); i++) {
             Map dm = (Map) dumpCtx.get(i);
             String ctxContent = (String) dm.get("content");
-            if ("system".equals(dm.get("role")) && ctxContent != null && ctxContent.startsWith("<skill name=\"")) {
-                int end = ctxContent.indexOf("\n");
-                String skillHeader = (end > 0) ? ctxContent.substring(0, end) : ctxContent;
-                ctxContent = skillHeader + " (完整内容见技能文件)";
-           }
            JSONObject dj = new JSONObject();
            dj.put("role", dm.get("role"));
            dj.put("content", ctxContent);
@@ -1531,7 +1433,6 @@ dumpMsgs.put(dj);
 
         String pubS = buildPublicStrata(); if (!pubS.isEmpty()) { JSONObject pj = new JSONObject(); pj.put("role", "system"); pj.put("content", pubS); dumpMsgs.put(pj); }
         String privS = buildStrataContext(senderUin); if (!privS.isEmpty()) { JSONObject pvj = new JSONObject(); pvj.put("role", "system"); pvj.put("content", privS); dumpMsgs.put(pvj); }
-        String sk = loadSkills(); if (!sk.isEmpty()) { JSONObject skj = new JSONObject(); skj.put("role", "system"); skj.put("content", "=== 可用技能 ===\n" + sk); dumpMsgs.put(skj); }
         if (!quotedText.isEmpty()) {
             JSONObject qmu = new JSONObject(); qmu.put("role", "user");
             qmu.put("name", quotedUin);
@@ -1640,12 +1541,6 @@ dumpMsgs.put(dj);
     if (!privStrata.isEmpty()) {
         sysCtx.append(privStrata).append("\n");
     }
-    // 技能
-    String skills = loadSkills();
-    if (!skills.isEmpty()) {
-        sysCtx.append("=== 可用技能 ===\n").append(skills).append("\n");
-    }
-
     // 当前场景
     sysCtx.append(chatType == 2 ? "群聊 群号:" + peerUin : "私聊").append(" 时间:").append(getCurrentTime()).append("\n");
     if (!atInfo.isEmpty()) {
@@ -2650,7 +2545,7 @@ String vfsRead(String path, String senderUin, String peerUin, int chatType) {
     }
     // directories
     if (path.equals("/bin/")) {
-        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-skill corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore stat corax-help";
+        return "touch rm mkdir chmod find sort uniq cut sed corax-edit corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-search corax-fetch corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore stat corax-help";
     }
     if (path.equals("/")) {
         return "bin/  proc/  etc/  dev/  ctx/  var/  src/  tmp/  persist/  usr/";
@@ -3830,12 +3725,6 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             List results = pub ? searchPublicMemories(kw) : searchMemories(senderUin, kw);
             return formatMemList(results, false);
         }
-        if (cmd.equals("corax-skill")) {
-            if (args.length < 1) {
-                return "用法: corax-skill <skill名称>";
-            }
-            return loadSkillContent(args[0]);
-        }
         if (cmd.equals("corax-listen")) {
             if (args.length < 1) {
                 return "用法: corax-listen <on|off|status>";
@@ -4055,7 +3944,7 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
         if (cmd.equals("corax-help")) {
             return "Corax-Shell v4.4.0\n\n"
                 + "内置命令: ls cat echo grep wc head tail date sleep\n"
-                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-skill corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore\n"
+                + "Corax命令: sed corax-edit corax-search corax-fetch corax-mem-create corax-mem-rm corax-mem-tag corax-mem-search corax-listen corax-reboot corax-snapshot-list corax-snapshot-restore\n"
                 + "管道/重定向: | > >> &\n"
                 + "文件系统: /proc/ /etc/ /dev/ /ctx/ /var/ /tmp/ /persist/ /src/\n"
                 + "查阅 /persist/DevDocs.md 了解项目架构";
@@ -4078,13 +3967,6 @@ String formatMemList(List results, boolean isPublic) {
     return sb.toString().trim();
 }
 
-// 加载技能内容
-String loadSkillContent(String name) {
-    if (!name.endsWith(".skill.txt")) {
-        name += ".skill.txt";
-    }
-    return readFileString(pluginPath + "/config/skills/" + name);
-}
 
 // 消息总线注入 — onMsg 调用
 void vfsPushMsgBus(String msgJson, String peerUin, int chatType) {
@@ -4539,7 +4421,6 @@ void handleAiConfig(Object msg) {
     sb.append("default_account = ").append(getDefaultAccount()).append("\n");
     String persona = loadPersona(); sb.append("人设 = ").append(getActivePersona()).append(persona.isEmpty() ? " (未)" : " (" + persona.length() + "字符)").append("\n");
     List ww = loadWakeWords(); sb.append("唤醒词 = ").append(ww.isEmpty() ? "(无)" : ""); for (int i = 0; i < ww.size(); i++) { if (i > 0) sb.append(","); sb.append(ww.get(i)); }
-    sb.append("\n技能 = "); String skills = loadSkills(); sb.append(skills.isEmpty() ? "(无)" : "已加载");
     sendStyledHeader(msg, "INFO", sb.toString());
 }
 
@@ -4732,7 +4613,6 @@ public void onMsg(Object msg) {
     if (!aiReady) {
         getDb();
         loadAiConfig();
-        loadSkills();
         aiReady = true;
     }
     
