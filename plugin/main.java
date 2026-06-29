@@ -4943,10 +4943,6 @@ void handleAiMemory(Object msg, String args) {
                 if (c > 0) {
                     sb2.append(", ");
                 }
-                sb2.append(en.getKey()).append("(").append(en.getValue()).append(")"); 
-                if (++c >= 15) {
-                    break; 
-                }
                 sb2.append(en.getKey()).append("(").append(en.getValue()).append(")");
                 if (++c >= 15) {
                     break;
