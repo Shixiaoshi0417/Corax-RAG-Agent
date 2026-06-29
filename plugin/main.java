@@ -3642,6 +3642,20 @@ String shellExecLine(String line, String senderUin, String peerUin, int chatType
             daemons.put(p, t);
             return "[pid:" + p + "]";
         }
+
+        // 提取 sleep 延时和实际执行 tokens
+        long delayMs = 0;
+        List execTokens = new ArrayList();
+        for (int ti = 0; ti < bgTokens.size(); ti++) {
+            String st = (String) bgTokens.get(ti);
+            if (st.equals("sleep") && ti + 1 < bgTokens.size()) {
+                try { delayMs = Long.parseLong(((String) bgTokens.get(ti + 1)).replaceAll("[^0-9]", "")) * 1000L; }
+                catch (Exception ex) { }
+                ti++;
+                continue;
+            }
+            execTokens.add(st);
+        }
         // 去掉 sleep 后面紧跟的 && / ;
         for (int ei = 0; ei < execTokens.size(); ei++) {
             if ((execTokens.get(ei).equals("&&") || execTokens.get(ei).equals(";")) && ei + 1 < execTokens.size()) {
