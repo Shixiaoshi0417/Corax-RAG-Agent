@@ -3136,10 +3136,17 @@ String snapCurrentContent(String vpath) {
     }
     if (vpath.startsWith("/etc/")) {
         String real = vfsMapEtcPath(vpath);
+        if (!new File(real).exists()) {
+            return "";
+        }
         return readFileString(real);
     }
     if (vpath.startsWith("/persist/")) {
-        return readFileString(pluginPath + "/shared-space/" + vpath.replace("/persist/", ""));
+        String real = pluginPath + "/shared-space/" + vpath.replace("/persist/", "");
+        if (!new File(real).exists()) {
+            return "";
+        }
+        return readFileString(real);
     }
     if (vpath.startsWith("/proc/sys/")) {
         String key = vpath.replace("/proc/sys/", "");
@@ -3195,7 +3202,20 @@ String listSnapshots(String vpath) {
     if (files == null || files.length == 0) {
         return "(无快照)";
     }
-    java.util.Arrays.sort(files);
+    // 按数字索引排序（非字典序）
+    for (int a = 0; a < files.length; a++) {
+        for (int b = a + 1; b < files.length; b++) {
+            int ia = 0;
+            int ib = 0;
+            try { ia = Integer.parseInt(files[a].split("_")[0]); } catch (Exception e) { }
+            try { ib = Integer.parseInt(files[b].split("_")[0]); } catch (Exception e) { }
+            if (ia > ib) {
+                String tmp = files[a];
+                files[a] = files[b];
+                files[b] = tmp;
+            }
+        }
+    }
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < files.length; i++) {
         // 1_2026-06-28_17-25-01_45KB → 1  2026-06-28 17:25:01  45KB
@@ -3227,6 +3247,8 @@ String restoreSnapshot(String vpath, int snapIdx) {
     if (target == null) {
         return "[快照 #" + snapIdx + " 不存在]";
     }
+    // 恢复前先保存当前状态，以防恢复错误可撤销
+    takeSnapshot(vpath);
     String content = readFileString(new File(dir, target).getAbsolutePath());
     if (content.startsWith("[binary ")) {
         return "[数据库快照需手动恢复: cp " + dir.getAbsolutePath() + "/" + target + " " + pluginPath + "/config/data.db]";
