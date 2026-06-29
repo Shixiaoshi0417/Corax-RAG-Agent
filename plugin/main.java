@@ -1973,7 +1973,14 @@ String getActivePersona() {
     if (!f.exists()) {
         return "default";
     }
-    try { BufferedReader br = new BufferedReader(new FileReader(f)); String s = br.readLine(); br.close(); if (s != null && !s.trim().isEmpty()) return s.trim(); } catch (Exception e) { }
+    try {
+        BufferedReader br = new BufferedReader(new FileReader(f));
+        String s = br.readLine();
+        br.close();
+        if (s != null && !s.trim().isEmpty()) {
+            return s.trim();
+        }
+    } catch (Exception e) { }
     return "default";
 }
 
@@ -2258,8 +2265,17 @@ String fetchWebContentSimple(String urlStr, int maxLen) {
             return "[抓取失败]";
         }
         BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-        StringBuilder sb = new StringBuilder(); String line; int total = 0;
-        while ((line = br.readLine()) != null && total < maxLen) { String t = line.trim(); if (t.length() == 0) continue; sb.append(t).append("\n"); total += t.length(); }
+        StringBuilder sb = new StringBuilder();
+        String line;
+        int total = 0;
+        while ((line = br.readLine()) != null && total < maxLen) {
+            String t = line.trim();
+            if (t.length() == 0) {
+                continue;
+            }
+            sb.append(t).append("\n");
+            total += t.length();
+        }
         br.close();
         String result = sb.toString().trim();
         if (result.length() > maxLen) result = result.substring(0, maxLen);
@@ -2758,9 +2774,13 @@ String snapDir(String vpath) {
 }
 int snapNextIndex(String vpath) {
     File dir = new File(snapDir(vpath));
-    if (!dir.exists()) return 1;
+    if (!dir.exists()) {
+        return 1;
+    }
     String[] files = dir.list();
-    if (files == null || files.length == 0) return 1;
+    if (files == null || files.length == 0) {
+        return 1;
+    }
     int max = 0;
     for (int i = 0; i < files.length; i++) {
         int idx = 0;
@@ -2773,7 +2793,9 @@ String snapCurrentContent(String vpath) {
     // 读取当前内容作为快照数据
     if (vpath.startsWith("/var/data.db")) {
         File f = new File(pluginPath + "/config/data.db");
-        if (!f.exists()) return "";
+        if (!f.exists()) {
+            return "";
+        }
         return "[binary " + f.length() + "B]";
     }
     if (vpath.startsWith("/etc/")) {
@@ -2823,9 +2845,13 @@ void takeSnapshot(String vpath) {
 }
 String listSnapshots(String vpath) {
     File dir = new File(snapDir(vpath));
-    if (!dir.exists() || !dir.isDirectory()) return "(无快照)";
+    if (!dir.exists() || !dir.isDirectory()) {
+        return "(无快照)";
+    }
     String[] files = dir.list();
-    if (files == null || files.length == 0) return "(无快照)";
+    if (files == null || files.length == 0) {
+        return "(无快照)";
+    }
     java.util.Arrays.sort(files);
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < files.length; i++) {
@@ -2841,14 +2867,20 @@ String listSnapshots(String vpath) {
 }
 String restoreSnapshot(String vpath, int snapIdx) {
     File dir = new File(snapDir(vpath));
-    if (!dir.exists()) return "[快照不存在]";
+    if (!dir.exists()) {
+        return "[快照不存在]";
+    }
     String[] files = dir.list();
-    if (files == null) return "[快照不存在]";
+    if (files == null) {
+        return "[快照不存在]";
+    }
     String target = null;
     for (int i = 0; i < files.length; i++) {
         if (files[i].startsWith(snapIdx + "_")) { target = files[i]; break; }
     }
-    if (target == null) return "[快照 #" + snapIdx + " 不存在]";
+    if (target == null) {
+        return "[快照 #" + snapIdx + " 不存在]";
+    }
     String content = readFileString(new File(dir, target).getAbsolutePath());
     if (content.startsWith("[binary ")) {
         return "[数据库快照需手动恢复: cp " + dir.getAbsolutePath() + "/" + target + " " + pluginPath + "/config/data.db]";
@@ -3942,13 +3974,23 @@ String maskApiKey(String key) {
 
 int getMemoryCount(String uin) {
     Cursor c = null;
-    try { c = getDb().rawQuery("SELECT COUNT(*) FROM memories WHERE uin=? AND scope='private'", new String[]{uin}); if (c.moveToFirst()) return c.getInt(0); } catch (Exception e) { }
+    try {
+        c = getDb().rawQuery("SELECT COUNT(*) FROM memories WHERE uin=? AND scope='private'", new String[]{uin});
+        if (c.moveToFirst()) {
+            return c.getInt(0);
+        }
+    } catch (Exception e) { }
     finally { if (c != null) c.close(); }
     return 0;
 }
 int getPublicMemoryCount() {
     Cursor c = null;
-    try { c = getDb().rawQuery("SELECT COUNT(*) FROM memories WHERE scope='public'", null); if (c.moveToFirst()) return c.getInt(0); } catch (Exception e) { }
+    try {
+        c = getDb().rawQuery("SELECT COUNT(*) FROM memories WHERE scope='public'", null);
+        if (c.moveToFirst()) {
+            return c.getInt(0);
+        }
+    } catch (Exception e) { }
     finally { if (c != null) c.close(); }
     return 0;
 }
@@ -3973,7 +4015,14 @@ String extractTargetUin(Object msg, String arg) {
     if (msg == null) {
         return null;
     }
-    if (msg.atList != null && msg.atList.size() > 0) { for (int i = 0; i < msg.atList.size(); i++) { String at = String.valueOf(msg.atList.get(i)); if (!at.equals(myUin)) return at; } }
+    if (msg.atList != null && msg.atList.size() > 0) {
+        for (int i = 0; i < msg.atList.size(); i++) {
+            String at = String.valueOf(msg.atList.get(i));
+            if (!at.equals(myUin)) {
+                return at;
+            }
+        }
+    }
     if (arg != null && arg.trim().matches("\\d{5,15}")) {
         return arg.trim();
     }
