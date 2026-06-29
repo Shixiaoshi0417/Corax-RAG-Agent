@@ -2977,6 +2977,7 @@ static int onMainThread = 0;
 static List daemonOutQueue = java.util.Collections.synchronizedList(new ArrayList());
 static List delayedTasks = java.util.Collections.synchronizedList(new ArrayList());
 static Map pendingApprovals = new HashMap();
+static int nextApprovalId = 1;
 String vfsReadDev(String path, String peerUin, int chatType) {
     if (path.equals("/dev/msg-stream")) {
         String key = peerUin + "_" + chatType;
@@ -4224,6 +4225,81 @@ String shellBuiltin(String cmd, String[] args, String stdin, String senderUin, S
             try { idx = Integer.parseInt(args[1]); } catch (Exception e) { return "编号必须为数字"; }
             String err = restoreSnapshot(args[0], idx);
             return err != null ? err : "已恢复到快照 #" + idx;
+        }
+        if (cmd.equals("corax-snapshot-rm")) {
+            if (args.length < 2) {
+                return "用法: corax-snapshot-rm <路径> <编号>";
+            }
+            int rmIdx = 0;
+            try { rmIdx = Integer.parseInt(args[1]); } catch (Exception e) { return "编号必须为数字"; }
+            String rmPath = args[0];
+            File rmSnapDir = new File(snapDir(rmPath));
+            if (!rmSnapDir.exists()) {
+                return "[快照不存在]";
+            }
+            String[] rmFiles = rmSnapDir.list();
+            if (rmFiles == null) {
+                return "[快照不存在]";
+            }
+            String rmTarget = null;
+            for (int fi = 0; fi < rmFiles.length; fi++) {
+                if (rmFiles[fi].startsWith(rmIdx + "_")) {
+                    rmTarget = rmFiles[fi];
+                    break;
+                }
+            }
+            if (rmTarget == null) {
+                return "[快照 #" + rmIdx + " 不存在]";
+            }
+            String[] rmSp = rmTarget.split("_");
+            String rmDate = rmSp.length > 1 ? rmSp[1] : "?";
+            String rmTime = rmSp.length > 2 ? rmSp[2].replace("-", ":") : "?";
+            String rmSize = rmSp.length > 3 ? rmSp[3] : "?";
+            String rmDesc = rmPath + " #" + rmIdx + " (" + rmDate + " " + rmTime + " " + rmSize + ")";
+            String appKey = peerUin + "_" + chatType;
+            final int appId = nextApprovalId++;
+            // 取消旧审批并取消其定时器
+            Map oldOp = (Map) pendingApprovals.get(appKey);
+            if (oldOp != null) {
+                Timer oldTm = (Timer) oldOp.get("timer");
+                if (oldTm != null) {
+                    try { oldTm.cancel(); } catch (Exception ex) { }
+                }
+            }
+            Map rmOp = new HashMap();
+            rmOp.put("type", "snapshot-delete");
+            rmOp.put("vpath", rmPath);
+            rmOp.put("idx", String.valueOf(rmIdx));
+            rmOp.put("desc", rmDesc);
+            rmOp.put("appId", appId);
+            final String fPu = peerUin;
+            final int fCt = chatType;
+            final String fKey = appKey;
+            final int fAppId = appId;
+            final String fDesc = rmDesc;
+            Timer rmTm = new Timer(true);
+            rmTm.schedule(new TimerTask() {
+                public void run() {
+                    new Handler(Looper.getMainLooper()).post(new Runnable() {
+                        public void run() {
+                            onMainThread++;
+                            try {
+                                Map op2 = (Map) pendingApprovals.get(fKey);
+                                if (op2 != null && "snapshot-delete".equals(op2.get("type"))
+                                    && Integer.parseInt(String.valueOf(op2.get("appId"))) == fAppId) {
+                                    pendingApprovals.remove(fKey);
+                                    injectApprovalResult(fPu, fCt, "删除快照 " + fDesc + " 请求超时，已自动拒绝");
+                                }
+                            } catch (Exception e) { }
+                            finally { onMainThread--; }
+                        }
+                    });
+                }
+            }, 30000);
+            rmOp.put("timer", rmTm);
+            pendingApprovals.put(appKey, rmOp);
+            sendMsg(peerUin, "[Corax-Shell] 请求删除快照 " + rmDesc + "，是否批准？发送 /ai operation permit 或 /ai operation reject（30 秒超时自动拒绝）", chatType);
+            return "[等待审批(30s)] 已发送快照删除请求: " + rmDesc;
         }
         if (cmd.equals("stat")) {
             if (args.length < 1) {
