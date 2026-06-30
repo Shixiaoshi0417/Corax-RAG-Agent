@@ -5533,7 +5533,8 @@ public void onMsg(Object msg) {
         aiReady = true;
     }
 
-    String text = msg.msg;
+    Object textObj = msg.msg;
+    String text = textObj != null ? textObj.toString() : null;
     if (text == null) {
         return;
     }
